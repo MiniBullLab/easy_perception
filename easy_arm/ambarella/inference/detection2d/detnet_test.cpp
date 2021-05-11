@@ -50,7 +50,7 @@ static void set_net_io(nnctrl_ctx_t *nnctrl_ctx)
 	nnctrl_ctx->net.net_in.in_desc[0].name = net_in_name;
 	nnctrl_ctx->net.net_in.in_desc[0].no_mem = 0;
 
-	nnctrl_ctx->net.net_out.out_num = 3;
+	nnctrl_ctx->net.net_out.out_num = OUTPUT_NUM;
 	nnctrl_ctx->net.net_out.out_desc[0].name = net_out_name_1;
 	nnctrl_ctx->net.net_out.out_desc[0].no_mem = 0; // let nnctrl lib allocate memory for output
     nnctrl_ctx->net.net_out.out_desc[1].name = net_out_name_2;
