@@ -1,7 +1,7 @@
 /*******************************************************************************
- * detnet_test.c
+ * posenet_test.c
  *
- * Author: foweiw
+ * Author: Lipeijie
  *
  ******************************************************************************/
 
@@ -31,6 +31,9 @@
 #include "inference/common/image_process.h"
 
 #include "inference/posenet/posenet_postprocess.h"
+
+#define INPUT_WIDTH (192)
+#define INPUT_HEIGHT (192)
 
 #define OUTPUT_NUM (1)
 
@@ -161,16 +164,16 @@ int posenet_run(posenet_ctx_t *posenet_ctx, const cv::Size src_size, std::vector
 
 std::vector<std::vector<KeyPoint>> postprocess(const cv::Size src_size, const cv::Size dst_size, const std::vector<cv::Mat>& netOutputParts)
 {
-    std::vector<std::vector<KeyPoint>> final_results;
-    getPostnetResult(netOutputParts, final_results);
-    float scale_w = src_size.width / 192.0;
-    float scale_h = src_size.height / 192.0;
-    for(int n  = 0; n < final_results.size();++n)
+    std::vector<std::vector<KeyPoint>> result;
+    getPostnetResult(netOutputParts, result);
+    float scale_w = src_size.width / INPUT_WIDTH;
+    float scale_h = src_size.height / INPUT_HEIGHT;
+    for(int n  = 0; n < result.size();++n)
     {
-        for(int p = 0; p < final_results[0].size(); p++)
+        for(int p = 0; p < result[0].size(); p++)
         {
-            int x = static_cast<int>(final_results[n][p].point.x * scale_w);
-            int y = static_cast<int>(final_results[n][p].point.y * scale_h);
+            int x = static_cast<int>(result[n][p].point.x * scale_w);
+            int y = static_cast<int>(result[n][p].point.y * scale_h);
             if(x > src_size.width)
             {
                 x = src_size.width;
@@ -179,11 +182,11 @@ std::vector<std::vector<KeyPoint>> postprocess(const cv::Size src_size, const cv
             {
                 y = src_size.height;
             }
-            final_results[n][p].point.x = x;
-            final_results[n][p].point.y = y;
+            result[n][p].point.x = x;
+            result[n][p].point.y = y;
         }
     }
-    return final_results;
+    return result;
 }
 
 void image_txt_infer(const std::string &image_dir, const std::string &image_txt_path)

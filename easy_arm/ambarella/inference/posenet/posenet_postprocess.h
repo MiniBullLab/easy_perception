@@ -28,11 +28,6 @@ struct ValidPair{
     float score;
 };
 
-// void splitNetOutputBlobToParts(float *netOutputBlob, const cv::Size& targetSize, std::vector<cv::Mat>& netOutputParts);
-
-// void splitNetOutputBlobToParts(float *netOutputBlob0, float *netOutputBlob1,
-//                                const cv::Size& targetSize, std::vector<cv::Mat>& netOutputParts);
-
 void getPostnetResult(const std::vector<cv::Mat>& netOutputParts, std::vector<std::vector<KeyPoint>> &result);
 
 #endif // POESNET_POSTPORCESS_H

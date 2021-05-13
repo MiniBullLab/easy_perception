@@ -1,9 +1,6 @@
 #include "inference/posenet/posenet_postprocess.h"
 #include <iostream>
 #include <set>
-#include "inference/common/utils.h"
-
-#include<opencv2/highgui.hpp>
 
 const static int nPoints = 18;
 
@@ -29,14 +26,6 @@ const static std::vector<std::pair<int,int>> posePairs = {
     {1,0}, {0,14}, {14,16}, {0,15}, {15,17}, {2,17},
     {5,16}
 };
-
-// const static int layer0_c = 19 + 38; 
-// const static int layer0_h = 184 / 8;
-// const static int layer0_w = 184 / 8; 
-
-// const static int layer1_c = 38; 
-// const static int layer1_h = 184 / 8;
-// const static int layer1_w = 128 / 8; 
 
 static void getKeyPoints(const cv::Mat& probMap, const double threshold, std::vector<KeyPoint>& keyPoints){
     cv::Mat smoothProbMap;
@@ -221,41 +210,6 @@ static void getPersonwiseKeypoints(const std::vector<std::vector<ValidPair>>& va
         }/* i */
     }/* k */
 }
-
-// void splitNetOutputBlobToParts(float *netOutputBlob, const cv::Size& targetSize, std::vector<cv::Mat>& netOutputParts){
-//     netOutputParts.clear();
-//     for(int i = 0; i< layer0_c;++i){
-//         cv::Mat resizedPart;
-//         cv::Mat part(layer0_h, layer0_w, CV_32F);
-//         memcpy(netOutputBlob, part.data, sizeof(float)*layer0_w*layer0_h);
-//         cv::resize(part, resizedPart, targetSize);
-//         netOutputParts.push_back(resizedPart);
-//         netOutputBlob += (layer0_h * layer0_w);
-//     } 
-// }
-
-// void splitNetOutputBlobToParts(float *netOutputBlob0, float *netOutputBlob1,
-//                                const cv::Size& targetSize, std::vector<cv::Mat>& netOutputParts){
-//     netOutputParts.clear();
-//     std::cout << "output0:" <<  sizeof(netOutputBlob0) / sizeof(float) << std::endl;
-//     for(int i = 0; i< layer0_c;++i){
-//         cv::Mat resizedPart;
-//         cv::Mat part(layer0_h, layer0_w, CV_32F);
-//         memcpy(netOutputBlob0, part.data, sizeof(float)*layer0_w*layer0_h);
-//         cv::resize(part, resizedPart, targetSize);
-//         netOutputParts.push_back(resizedPart);
-//         netOutputBlob0 += (layer0_h * layer0_w);
-//     } 
-//     std::cout << "output1:" <<  sizeof(netOutputBlob1) / sizeof(float) << std::endl;
-//     for(int j = 0; j< layer1_c;++j){
-//         cv::Mat resizedPart;
-//         cv::Mat part(layer1_h, layer1_w, CV_32F);
-//         memcpy(netOutputBlob1, part.data, sizeof(float)*layer1_w*layer1_h);
-//         cv::resize(part, resizedPart, targetSize);
-//         netOutputParts.push_back(resizedPart);
-//         netOutputBlob1 += (layer1_h * layer1_w);
-//     }                               
-// }
 
 void getPostnetResult(const std::vector<cv::Mat>& netOutputParts, std::vector<std::vector<KeyPoint>> &result){
     int keyPointId = 0;
