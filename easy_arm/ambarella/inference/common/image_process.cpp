@@ -32,8 +32,8 @@ void image_resize_square(const cv::Mat &src, const cv::Size dst_size, cv::Mat &d
     const int left = pad_size.width / 2;
     const int right = pad_size.width - (pad_size.width / 2);
     cv::Mat resize_mat;
-    cv::resize(src, resize_mat, cv::Size(new_width, new_height), 0, 0, cv::INTER_NEAREST);
-    cv::copyMakeBorder(resize_mat, dst_image, top, bottom, left, right, cv::INTER_NEAREST, cv::Scalar(0, 0, 0));
+    cv::resize(src, resize_mat, cv::Size(new_width, new_height), 0, 0, cv::INTER_LINEAR);
+    cv::copyMakeBorder(resize_mat, dst_image, top, bottom, left, right, cv::INTER_LINEAR, cv::Scalar(0, 0, 0));
 }
 
 cv::Size get_input_size(nnctrl_ctx_t *nnctrl_ctx)
@@ -67,11 +67,12 @@ void preprocess(nnctrl_ctx_t *nnctrl_ctx, const cv::Mat &src_mat, const int resi
         return;
     }
     cv::Size dst_size = get_input_size(nnctrl_ctx);
-    int pitch = get_input_pitch(nnctrl_ctx);
+    int width = nnctrl_ctx->net.net_in.in_desc[0].dim.width;
+    int pitch = LAYER_P(width);
     cv::Mat dst_mat;
     std::vector<cv::Mat> channel_s;
     if(resize_type == 0){
-        cv::resize(src_mat, dst_mat, dst_size, 0, 0, cv::INTER_NEAREST);
+        cv::resize(src_mat, dst_mat, dst_size, 0, 0, cv::INTER_LINEAR);
     }
     else if(resize_type == 1){
         image_resize_square(src_mat, dst_size, dst_mat);

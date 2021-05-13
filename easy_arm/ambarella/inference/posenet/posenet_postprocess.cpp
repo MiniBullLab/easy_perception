@@ -40,14 +40,12 @@ const static std::vector<std::pair<int,int>> posePairs = {
 
 static void getKeyPoints(const cv::Mat& probMap, const double threshold, std::vector<KeyPoint>& keyPoints){
     cv::Mat smoothProbMap;
-    cv::GaussianBlur(probMap, smoothProbMap, cv::Size( 3, 3 ), 0, 0);
-
     cv::Mat maskedProbMap;
-    cv::threshold(smoothProbMap, maskedProbMap,threshold,255,cv::THRESH_BINARY);
+    cv::GaussianBlur(probMap, smoothProbMap, cv::Size(3, 3), 0, 0);
+
+    cv::threshold(smoothProbMap, maskedProbMap, threshold, 255, cv::THRESH_BINARY);
 
     maskedProbMap.convertTo(maskedProbMap,CV_8U,1);
-
-    cv::imwrite("keypoint.png", maskedProbMap);
 
     std::vector<std::vector<cv::Point> > contours;
     cv::findContours(maskedProbMap,contours,cv::RETR_TREE,cv::CHAIN_APPROX_SIMPLE);
@@ -87,8 +85,8 @@ static void getValidPairs(const std::vector<cv::Mat>& netOutputParts,
                           std::set<int>& invalidPairs) {
 
     int nInterpSamples = 10;
-    float pafScoreTh = 0.1;
-    float confTh = 0.7;
+    float pafScoreTh = 0.1f;
+    float confTh = 0.7f;
 
     for(int k = 0; k < mapIdx.size();++k ){
 
@@ -266,12 +264,15 @@ void getPostnetResult(const std::vector<cv::Mat>& netOutputParts, std::vector<st
     std::set<int> invalidPairs;
     std::vector<KeyPoint> keyPointsList;
     std::vector<std::vector<int>> personwiseKeypoints;
+    keyPointsList.clear();
+    personwiseKeypoints.clear();
     result.clear();
 
     for(int i = 0; i < nPoints;++i){
         std::vector<KeyPoint> keyPoints;
+        keyPoints.clear();
 
-        getKeyPoints(netOutputParts[i], 0.05, keyPoints);
+        getKeyPoints(netOutputParts[i], 0.1, keyPoints);
 
         for(int i = 0; i< keyPoints.size();++i,++keyPointId){
             keyPoints[i].id = keyPointId;
@@ -279,8 +280,8 @@ void getPostnetResult(const std::vector<cv::Mat>& netOutputParts, std::vector<st
 
         detectedKeypoints.push_back(keyPoints);
         keyPointsList.insert(keyPointsList.end(),keyPoints.begin(),keyPoints.end());
+        // std::cout << "keyPoints:" << keyPoints.size() << std::endl;
     }
-
 
     getValidPairs(netOutputParts, detectedKeypoints, validPairs, invalidPairs);
     getPersonwiseKeypoints(validPairs, invalidPairs, personwiseKeypoints);
@@ -298,4 +299,5 @@ void getPostnetResult(const std::vector<cv::Mat>& netOutputParts, std::vector<st
         }
         result.push_back(objectPoints);
     }
+    // std::cout << "result:" << result.size() << std::endl;
 }

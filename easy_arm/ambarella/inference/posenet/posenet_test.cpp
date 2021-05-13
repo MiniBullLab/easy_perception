@@ -37,11 +37,8 @@
 const static int g_canvas_id = 1;
 const static char* net_in_name = "data";
 const static char* net_out_name_1 = "concat_stage7";
-//const static char* net_out_name_2 = "365";
 
-const static int nPoints = 18;
-
-const static std::vector<std::pair<int,int>> posePairs = {
+const static std::vector<std::pair<int,int>> posePairs1 = {
     {1,2}, {1,5}, {2,3}, {3,4}, {5,6}, {6,7},
     {1,8}, {8,9}, {9,10}, {1,11}, {11,12}, {12,13},
     {1,0}, {0,14}, {14,16}, {0,15}, {15,17}, {2,17},
@@ -63,8 +60,6 @@ static void set_net_io(nnctrl_ctx_t *nnctrl_ctx)
 	nnctrl_ctx->net.net_out.out_num = OUTPUT_NUM;
 	nnctrl_ctx->net.net_out.out_desc[0].name = net_out_name_1;
 	nnctrl_ctx->net.net_out.out_desc[0].no_mem = 0; // let nnctrl lib allocate memory for output
-    // nnctrl_ctx->net.net_out.out_desc[1].name = net_out_name_2;
-	// nnctrl_ctx->net.net_out.out_desc[1].no_mem = 0; // let nnctrl lib allocate memory for output
 }
 
 static int init_param(nnctrl_ctx_t *nnctrl_ctx)
@@ -110,9 +105,10 @@ static void posenet_deinit(posenet_ctx_t *posenet_ctx)
 
 int posenet_run(posenet_ctx_t *posenet_ctx, const cv::Size src_size, std::vector<cv::Mat>& netOutputParts)
 {
+    unsigned long time_start, time_end;
     int rval = 0;
     nnctrl_ctx_t *nnctrl_ctx = &posenet_ctx->nnctrl_ctx;
-
+    
     rval = nnctrl_run_net(nnctrl_ctx->net.net_id, &nnctrl_ctx->net.result, NULL, NULL, NULL);
 
     if (rval < 0)
@@ -125,87 +121,68 @@ int posenet_run(posenet_ctx_t *posenet_ctx, const cv::Size src_size, std::vector
         cavalry_sync_cache(nnctrl_ctx->net.net_m.mem_size, nnctrl_ctx->net.net_m.phy_addr, 0, 1);
     }
 
+    time_start = get_current_time();
     netOutputParts.clear();
 
     float *score_addr = (float *)(nnctrl_ctx->net.net_m.virt_addr
         + nnctrl_ctx->net.net_out.out_desc[0].addr - nnctrl_ctx->net.net_m.phy_addr);
-
 
     int output_c = nnctrl_ctx->net.net_out.out_desc[0].dim.depth;
     int output_h = nnctrl_ctx->net.net_out.out_desc[0].dim.height;
     int output_w = nnctrl_ctx->net.net_out.out_desc[0].dim.width;
     int output_p = nnctrl_ctx->net.net_out.out_desc[0].dim.pitch;
     int size = nnctrl_ctx->net.net_out.out_desc[0].size;
+    int output_pitch = LAYER_P(output_w);
+    int layer_count = output_h * output_w;
 
     std::cout << "output size: " << "--output_c: " << output_c << "--output_h: " << output_h << "--output_w: " \
                                   << output_w << "--output_p: " << output_p << "--" << size << std::endl;
+    std::cout << "output_pitch:" << output_pitch << std::endl;
 
-    std::ofstream save_result;
+    // std::ofstream save_result;
+    // save_result.open("temp.bin", std::ofstream::binary);
+    // save_result.write(reinterpret_cast<const char*>(score_addr), size);
+    // save_result.close();
 
     netOutputParts.clear();
     for(int c = 0; c < output_c; ++c)
     {
         cv::Mat resizedPart;
-        cv::Mat part(output_h, output_w, CV_32FC1);
-        for (int h = 0; h < output_h; h++)
-        {
-            memcpy(part.data + h * output_w, score_addr + c * h * output_p, output_w * sizeof(float));
-        }
-        cv::resize(part, resizedPart, src_size);
+        cv::Mat part(output_h, output_w, CV_32F, cv::Scalar(255));
+        memcpy(part.data, score_addr, output_h *  output_p);
+        score_addr = score_addr + layer_count;
+        cv::resize(part, resizedPart, cv::Size(192, 192), cv::INTER_NEAREST);
         netOutputParts.push_back(resizedPart);
     }
-
-    save_result.open("temp.bin", std::ofstream::binary);
-    save_result.write(reinterpret_cast<const char*>(score_addr), sizeof(float)*size);
-    save_result.close();
-
-    // std::ofstream save_result;
-
-    // for (int i = OUTPUT_NUM-1; i >= 0; i--)
-	// {
-    //     float *score_addr = (float *)(nnctrl_ctx->net.net_m.virt_addr
-    //                         + nnctrl_ctx->net.net_out.out_desc[i].addr - nnctrl_ctx->net.net_m.phy_addr);
-
-
-    //     int output_c = nnctrl_ctx->net.net_out.out_desc[i].dim.depth;
-    //     int output_h = nnctrl_ctx->net.net_out.out_desc[i].dim.height;
-    //     int output_w = nnctrl_ctx->net.net_out.out_desc[i].dim.width;
-    //     int output_p = nnctrl_ctx->net.net_out.out_desc[i].dim.pitch;
-    //     int size = nnctrl_ctx->net.net_out.out_desc[i].size;
-
-    //     std::cout << "output size: " << "--output_c: " << output_c << "--output_h: " << output_h << "--output_w: " \
-    //                               << output_w << "--output_p: " << output_p << "--" << size << std::endl;
-
-	// 	// output[i] = score_addr;	
-    //     std::stringstream save_path;
-    //     save_path << i << "_output.bin";
-    //     save_result.open(save_path.str(), std::ofstream::binary);
-    //     save_result.write(reinterpret_cast<const char*>(score_addr), sizeof(float)*size);
-    //     save_result.close();
-
-    //     for(int c = 0; c < output_c;++c)
-    //     {
-    //         cv::Mat resizedPart;
-    //         cv::Mat part(output_h, output_w, CV_32FC1, cv::Scalar(0));
-    //         for (int h = 0; h < output_h; h++)
-    //         {
-    //             memcpy(part.data + h * output_w, score_addr + c * h * output_p, output_w * sizeof(float));
-    //         }
-    //         cv::resize(part, resizedPart, src_size);
-    //         netOutputParts.push_back(resizedPart);
-    //     }
-
-    // }
-
+    time_end = get_current_time();
+    std::cout << "resize cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
     return rval;
 }
 
 std::vector<std::vector<KeyPoint>> postprocess(const cv::Size src_size, const cv::Size dst_size, const std::vector<cv::Mat>& netOutputParts)
 {
-    //std::vector<cv::Mat> netOutputParts;
     std::vector<std::vector<KeyPoint>> final_results;
-    //splitNetOutputBlobToParts(output[1], output[0], src_size, netOutputParts);
     getPostnetResult(netOutputParts, final_results);
+    float scale_w = src_size.width / 192.0;
+    float scale_h = src_size.height / 192.0;
+    for(int n  = 0; n < final_results.size();++n)
+    {
+        for(int p = 0; p < final_results[0].size(); p++)
+        {
+            int x = static_cast<int>(final_results[n][p].point.x * scale_w);
+            int y = static_cast<int>(final_results[n][p].point.y * scale_h);
+            if(x > src_size.width)
+            {
+                x = src_size.width;
+            }
+            if(y > src_size.height)
+            {
+                y = src_size.height;
+            }
+            final_results[n][p].point.x = x;
+            final_results[n][p].point.y = y;
+        }
+    }
     return final_results;
 }
 
@@ -248,14 +225,13 @@ void image_txt_infer(const std::string &image_dir, const std::string &image_txt_
         posenet_run(&pose_ctx, cv::Size(src_image.cols, src_image.rows), netOutputParts);
         time_end = get_current_time();
         std::cout << "posenet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
-        getPostnetResult(netOutputParts, result);
-        //result = postprocess(cv::Size(src_image.cols, src_image.rows), net_input_size, output);
+        result = postprocess(cv::Size(src_image.cols, src_image.rows), net_input_size, netOutputParts);
         time_end = get_current_time();
         std::cout << "posenet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
 
-        for(int i = 0; i< nPoints-1;++i){
+        for(int i = 0; i< 18-1;++i){
             for(int n  = 0; n < result.size();++n){
-                const std::pair<int,int>& posePair = posePairs[i];
+                const std::pair<int,int>& posePair = posePairs1[i];
                 const KeyPoint& kpA = result[n][posePair.first];
                 const KeyPoint& kpB = result[n][posePair.second];
                 if(kpA.probability < 0 || kpB.probability < 0){
