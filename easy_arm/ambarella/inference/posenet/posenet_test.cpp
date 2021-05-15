@@ -30,7 +30,7 @@
 #include "inference/common/net_process.h"
 #include "inference/common/image_process.h"
 
-#include "inference/posenet/posenet_postprocess.h"
+#include "inference/posenet/openpose_postprocess.h"
 
 #define INPUT_WIDTH (192)
 #define INPUT_HEIGHT (192)

@@ -1,4 +1,4 @@
-#include "inference/posenet/posenet_postprocess.h"
+#include "inference/posenet/openpose_postprocess.h"
 #include <iostream>
 #include <set>
 

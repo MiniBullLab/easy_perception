@@ -1,5 +1,5 @@
-#ifndef POESNET_POSTPORCESS_H
-#define POESNET_POSTPORCESS_H
+#ifndef OPENPOSE_POSTPORCESS_H
+#define OPENPOSE_POSTPORCESS_H
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc.hpp>
