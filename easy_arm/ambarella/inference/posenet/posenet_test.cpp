@@ -20,6 +20,7 @@
 #include <getopt.h>
 #include <dirent.h>
 
+#include <thread>
 #include <sstream>
 
 #include<opencv2/highgui.hpp>
@@ -31,6 +32,14 @@
 #include "inference/common/image_process.h"
 
 #include "inference/posenet/openpose_postprocess.h"
+
+#include "IOdevice.hpp"
+
+//#define TEST_R01TH
+//#define TEST_I05C
+//#define TEST_I05M
+#define TEST_I08C
+//#define TOFPROCESS
 
 #define INPUT_WIDTH (192)
 #define INPUT_HEIGHT (192)
@@ -53,6 +62,13 @@ typedef struct posenet_ctx_s {
     vproc_ctx_t vproc_ctx;
     nnctrl_ctx_t nnctrl_ctx;
 } posenet_ctx_t;
+
+static volatile bool stop = false;
+
+static void sig_int_handler(int)
+{
+   stop = true;
+}
 
 static void set_net_io(nnctrl_ctx_t *nnctrl_ctx)
 {
@@ -252,12 +268,100 @@ void image_txt_infer(const std::string &image_dir, const std::string &image_txt_
     posenet_deinit(&pose_ctx);
 }
 
+void camera_infer()
+{
+    unsigned long frame_index = 0;
+    unsigned long time_start, time_end;
+    CameraDevice cam;
+    posenet_ctx_t pose_ctx;
+    std::vector<std::vector<KeyPoint>> result;
+    std::vector<cv::Mat> netOutputParts;
+    cv::Mat src_image;
+
+#ifdef TEST_I05C
+	cam.loadCamera(CameraDevice::I05C,CameraDevice::CameraImSize::I05C_2432x2048);
+#endif
+
+#ifdef TEST_I05M
+//	cam.loadCamera(CameraDevice::I05M,CameraDevice::CameraImSize::I05M_2432x2048);
+	cam.loadCamera(CameraDevice::I05M,CameraDevice::CameraImSize::I05M_1920x1080);
+#endif
+
+#ifdef TEST_R01TH
+	cam.loadCamera(CameraDevice::R01TH,CameraDevice::CameraImSize::R01TH_1280x800);
+#endif
+
+#ifdef TEST_I08C
+	cam.loadCamera(CameraDevice::I08C,CameraDevice::CameraImSize::I08C_3840x2160);
+#endif
+
+	HDMIDevice hdmi;
+	hdmi.HDMIInit();
+
+    memset(&pose_ctx, 0, sizeof(posenet_ctx_t));
+    init_param(&pose_ctx.nnctrl_ctx);
+    posenet_init(&pose_ctx);
+    cv::Size net_input_size = get_input_size(&pose_ctx.nnctrl_ctx);
+
+    signal(SIGINT, sig_int_handler);
+    signal(SIGTERM, sig_int_handler);
+    signal(SIGKILL, sig_int_handler);
+    signal(SIGQUIT, sig_int_handler);
+
+    while(1){
+        result.clear();
+        netOutputParts.clear();
+		// grab image
+		time_start = get_current_time();
+		src_image = cam.grabImage();
+        time_end = get_current_time();
+		double dt_grab = (time_end - time_start) / 1000.0;
+
+		time_start = get_current_time();
+        preprocess(&pose_ctx.nnctrl_ctx, src_image, 0);
+        posenet_run(&pose_ctx, cv::Size(src_image.cols, src_image.rows), netOutputParts);
+        result = postprocess(cv::Size(src_image.cols, src_image.rows), net_input_size, netOutputParts);
+        time_end = get_current_time();
+        std::cout << "posenet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
+
+        for(int i = 0; i< 18-1;++i){
+            for(int n  = 0; n < result.size();++n){
+                const std::pair<int,int>& posePair = posePairs1[i];
+                const KeyPoint& kpA = result[n][posePair.first];
+                const KeyPoint& kpB = result[n][posePair.second];
+                if(kpA.probability < 0 || kpB.probability < 0){
+                    continue;
+                }
+                cv::line(src_image, kpA.point, kpB.point, cv::Scalar(0, 0, 255), 3, cv::LINE_AA);
+            }
+        }
+
+		// display image
+		time_start = get_current_time();
+		hdmi.HDMIShow(src_image);
+        time_end = get_current_time();
+		double dt_disp = (time_end - time_start) / 1000.0;
+
+		printf("%d %d -> grabbing display time/fq : %1.3lf/%2.1lf %1.3lf/%2.1lf %d\n",src_image.cols,src_image.rows,dt_grab,1.0/dt_grab,dt_disp,1.0/dt_disp,src_image.channels());
+
+        // std::stringstream save_path;
+        // save_path << frame_index << "_li.png";
+        // cv::imwrite(save_path.str(), src_image);
+        frame_index++;
+
+		if (stop){break;}
+	}
+    posenet_deinit(&pose_ctx);
+}
+
+
 int main()
 {
     std::cout << "start..." << std::endl;
-    const std::string image_dir = "./pose_img/";
-    const std::string image_txt_path = "img.txt";
-    image_txt_infer(image_dir, image_txt_path);
+    // const std::string image_dir = "./pose_img/";
+    // const std::string image_txt_path = "img.txt";
+    // image_txt_infer(image_dir, image_txt_path);
+    camera_infer();
     std::cout << "End of game!!!" << std::endl;
     return 0;
 }

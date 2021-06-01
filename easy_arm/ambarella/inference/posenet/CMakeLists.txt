@@ -15,9 +15,15 @@ target_link_libraries(posenet_test
                       opencv_imgcodecs
                       opencv_imgproc
                       opencv_highgui
+                      opencv_flann
+                      opencv_features2d
                       jpeg
                       png
                       z
                       nnctrl
                       vproc
-                      cavalry_mem)
+                      cavalry_mem
+                      utils
+                      cvlib
+                      PhaseData_20190919_v1.4f
+                      IOdevice)

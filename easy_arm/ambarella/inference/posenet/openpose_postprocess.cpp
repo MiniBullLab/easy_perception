@@ -253,5 +253,5 @@ void getPostnetResult(const std::vector<cv::Mat>& netOutputParts, std::vector<st
         }
         result.push_back(objectPoints);
     }
-    // std::cout << "result:" << result.size() << std::endl;
+    std::cout << "result:" << result.size() << std::endl;
 }
