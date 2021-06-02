@@ -57,6 +57,15 @@ const static std::vector<std::pair<int,int>> posePairs1 = {
     {5,16}
 };
 
+const static std::vector<cv::Scalar> colors = {
+    cv::Scalar(255, 0, 0), cv::Scalar(0, 255, 0), cv::Scalar(0, 0, 255),
+    cv::Scalar(255, 255, 0), cv::Scalar(0, 255, 255), cv::Scalar(255, 0, 255),
+    cv::Scalar(142, 229, 238), cv::Scalar(128, 0, 0), cv::Scalar(0, 100, 0),
+    cv::Scalar(0, 0, 128), cv::Scalar(128, 128, 0), cv::Scalar(0, 128, 128),
+    cv::Scalar(65, 105, 225), cv::Scalar(132, 112, 255), cv::Scalar(238, 122, 233),
+    cv::Scalar(28, 134, 238), cv::Scalar(178, 58, 238), cv::Scalar(150, 62, 255),
+};
+
 typedef struct posenet_ctx_s {
     cavalry_ctx_t cavalry_ctx;
     vproc_ctx_t vproc_ctx;
@@ -324,6 +333,16 @@ void camera_infer()
         time_end = get_current_time();
         std::cout << "posenet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
 
+        for(int i = 0; i < 18;++i){
+           for(int j = 0; j < result.size(); ++j){
+               const KeyPoint& kp = result[j][i];
+               if(kp.probability < 0){
+                    continue;
+                }
+               cv::circle(src_image, kp.point, 15, colors[i], -1, cv::LINE_AA);
+           }
+        }
+
         for(int i = 0; i< 18-1;++i){
             for(int n  = 0; n < result.size();++n){
                 const std::pair<int,int>& posePair = posePairs1[i];
@@ -332,7 +351,7 @@ void camera_infer()
                 if(kpA.probability < 0 || kpB.probability < 0){
                     continue;
                 }
-                cv::line(src_image, kpA.point, kpB.point, cv::Scalar(0, 0, 255), 3, cv::LINE_AA);
+                cv::line(src_image, kpA.point, kpB.point, colors[i], 5, cv::LINE_AA);
             }
         }
 
@@ -342,12 +361,12 @@ void camera_infer()
         time_end = get_current_time();
 		double dt_disp = (time_end - time_start) / 1000.0;
 
-		printf("%d %d -> grabbing display time/fq : %1.3lf/%2.1lf %1.3lf/%2.1lf %d\n",src_image.cols,src_image.rows,dt_grab,1.0/dt_grab,dt_disp,1.0/dt_disp,src_image.channels());
+		// printf("%d %d -> grabbing display time/fq : %1.3lf/%2.1lf %1.3lf/%2.1lf %d\n",src_image.cols,src_image.rows,dt_grab,1.0/dt_grab,dt_disp,1.0/dt_disp,src_image.channels());
 
         // std::stringstream save_path;
         // save_path << frame_index << "_li.png";
         // cv::imwrite(save_path.str(), src_image);
-        frame_index++;
+        // frame_index++;
 
 		if (stop){break;}
 	}
