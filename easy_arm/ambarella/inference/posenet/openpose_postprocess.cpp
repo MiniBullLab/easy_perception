@@ -73,9 +73,9 @@ static void getValidPairs(const std::vector<cv::Mat>& netOutputParts,
                           std::vector<std::vector<ValidPair>>& validPairs,
                           std::set<int>& invalidPairs) {
 
-    int nInterpSamples = 10;
-    float pafScoreTh = 0.1f;
-    float confTh = 0.7f;
+    int nInterpSamples = 6;
+    float pafScoreTh = 0.5f;
+    float confTh = 0.8f;
 
     for(int k = 0; k < mapIdx.size();++k ){
 
@@ -226,7 +226,7 @@ void getPostnetResult(const std::vector<cv::Mat>& netOutputParts, std::vector<st
         std::vector<KeyPoint> keyPoints;
         keyPoints.clear();
 
-        getKeyPoints(netOutputParts[i], 0.1, keyPoints);
+        getKeyPoints(netOutputParts[i], 0.25, keyPoints);
 
         for(int i = 0; i< keyPoints.size();++i,++keyPointId){
             keyPoints[i].id = keyPointId;

@@ -17,6 +17,7 @@ target_link_libraries(posenet_test
                       opencv_highgui
                       opencv_flann
                       opencv_features2d
+                      opencv_videoio
                       jpeg
                       png
                       z

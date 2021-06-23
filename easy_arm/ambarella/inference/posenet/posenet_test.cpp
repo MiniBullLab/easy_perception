@@ -23,7 +23,8 @@
 #include <thread>
 #include <sstream>
 
-#include<opencv2/highgui.hpp>
+#include <opencv2/videoio.hpp>
+#include <opencv2/highgui.hpp>
 
 
 #include "inference/common/utils.h"
@@ -40,6 +41,8 @@
 //#define TEST_I05M
 #define TEST_I08C
 //#define TOFPROCESS
+
+//#define TEST_VIDEO
 
 #define INPUT_WIDTH (192)
 #define INPUT_HEIGHT (192)
@@ -179,7 +182,7 @@ int posenet_run(posenet_ctx_t *posenet_ctx, const cv::Size src_size, std::vector
         cv::Mat part(output_h, output_w, CV_32F, cv::Scalar(255));
         memcpy(part.data, score_addr, output_h *  output_p);
         score_addr = score_addr + layer_count;
-        cv::resize(part, resizedPart, cv::Size(192, 192), cv::INTER_NEAREST);
+        cv::resize(part, resizedPart, cv::Size(INPUT_WIDTH, INPUT_HEIGHT), cv::INTER_NEAREST);
         netOutputParts.push_back(resizedPart);
     }
     time_end = get_current_time();
@@ -287,6 +290,16 @@ void camera_infer()
     std::vector<cv::Mat> netOutputParts;
     cv::Mat src_image;
 
+#ifdef TEST_VIDEO
+    cv::VideoCapture capture;
+    capture.open("/sdcard/video.avi", cv::CAP_OPENCV_MJPEG);
+	if (capture.isOpened())
+	{
+		std::cout << "open video failed..\n" << std::endl;
+		return;
+	}
+#endif
+
 #ifdef TEST_I05C
 	cam.loadCamera(CameraDevice::I05C,CameraDevice::CameraImSize::I05C_2432x2048);
 #endif
@@ -322,7 +335,14 @@ void camera_infer()
         netOutputParts.clear();
 		// grab image
 		time_start = get_current_time();
+#ifdef TEST_VIDEO
+        if(!capture.read(src_image))
+        {
+            break;
+        }
+#else
 		src_image = cam.grabImage();
+#endif
         time_end = get_current_time();
 		double dt_grab = (time_end - time_start) / 1000.0;
 
@@ -339,7 +359,7 @@ void camera_infer()
                if(kp.probability < 0){
                     continue;
                 }
-               cv::circle(src_image, kp.point, 15, colors[i], -1, cv::LINE_AA);
+               cv::circle(src_image, kp.point, 20, colors[i], -1, cv::LINE_AA);
            }
         }
 
@@ -351,7 +371,7 @@ void camera_infer()
                 if(kpA.probability < 0 || kpB.probability < 0){
                     continue;
                 }
-                cv::line(src_image, kpA.point, kpB.point, colors[i], 5, cv::LINE_AA);
+                cv::line(src_image, kpA.point, kpB.point, colors[i], 10, cv::LINE_AA);
             }
         }
 
