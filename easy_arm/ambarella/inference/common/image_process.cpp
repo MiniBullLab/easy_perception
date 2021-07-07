@@ -1,5 +1,6 @@
 #include "inference/common/image_process.h"
 #include <iostream>
+#include <math.h>
 #include "inference/common/utils.h"
 
 void get_square_size(const cv::Size src_size, const cv::Size dst_size, float &ratio, cv::Size &pad_size)
@@ -34,6 +35,27 @@ void image_resize_square(const cv::Mat &src, const cv::Size dst_size, cv::Mat &d
     cv::Mat resize_mat;
     cv::resize(src, resize_mat, cv::Size(new_width, new_height), 0, 0, cv::INTER_LINEAR);
     cv::copyMakeBorder(resize_mat, dst_image, top, bottom, left, right, cv::INTER_LINEAR, cv::Scalar(0, 0, 0));
+}
+
+void resize_with_specific_height(const cv::Mat &src, const cv::Size dst_size, cv::Mat &dst_image)
+{
+    const int src_width = src.cols;
+    const int src_height = src.rows;
+    float ratio = src_width / float(src_height);
+    int resize_w = ceil(ratio * dst_size.height);
+    if(resize_w >= dst_size.width){
+        resize_w = dst_size.width;
+        cv::resize(src, dst_image, cv::Size(resize_w, dst_size.height), 0, 0, cv::INTER_LINEAR);
+    }
+    else
+    {
+        cv::Mat temp_mat;
+        dst_image = cv::Mat::zeros(dst_size.height, dst_size.width, CV_8UC3);
+        cv::resize(src, temp_mat, cv::Size(resize_w, dst_size.height), 0, 0, cv::INTER_LINEAR);
+        temp_mat.copyTo(dst_image(cv::Rect(0, 0, resize_w, dst_size.height)));
+        cv::imwrite("li0.png", temp_mat);
+        cv::imwrite("li.png", dst_image);
+    } 
 }
 
 cv::Size get_input_size(nnctrl_ctx_t *nnctrl_ctx)
@@ -76,6 +98,9 @@ void preprocess(nnctrl_ctx_t *nnctrl_ctx, const cv::Mat &src_mat, const int resi
     }
     else if(resize_type == 1){
         image_resize_square(src_mat, dst_size, dst_mat);
+    }
+    else if(resize_type == 2){
+        resize_with_specific_height(src_mat, dst_size, dst_mat);
     }
     
     cv::split(dst_mat, channel_s);

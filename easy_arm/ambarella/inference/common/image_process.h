@@ -12,6 +12,8 @@ void get_square_size(const cv::Size src_size, const cv::Size dst_size, float &ra
 
 void image_resize_square(const cv::Mat &src, cv::Size dst_size, cv::Mat &dst_image);
 
+void resize_with_specific_height(const cv::Mat &src, const cv::Size dst_size, cv::Mat &dst_image);
+
 cv::Size get_input_size(nnctrl_ctx_t *nnctrl_ctx);
 
 int get_input_pitch(nnctrl_ctx_t *nnctrl_ctx);

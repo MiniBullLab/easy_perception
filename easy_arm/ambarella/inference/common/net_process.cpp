@@ -1,5 +1,7 @@
 #include "inference/common/net_process.h"
 
+const static int g_canvas_id = 1;
+
 static int init_net_memory(struct net_cfg *cfg, struct net_input_cfg *input_cfg, struct net_output_cfg *ouput_cfg, struct net_mem *mem,
                            uint8_t verbose, uint8_t reuse_mem, uint32_t batch_num, uint8_t cache_en, char *model_file_path);
 
@@ -126,3 +128,42 @@ int init_net_memory(struct net_cfg *cfg, struct net_input_cfg *input_cfg, struct
 
     return net_id;
 }
+
+// void set_net_io(nnctrl_ctx_t *nnctrl_ctx, const char* net_in_name, const char* net_out_name)
+// {
+//     nnctrl_ctx->net.net_in.in_num = 1;
+//     nnctrl_ctx->net.net_in.in_desc[0].name = net_in_name;
+// 	nnctrl_ctx->net.net_in.in_desc[0].no_mem = 0;
+
+// 	nnctrl_ctx->net.net_out.out_num = 1;
+//     nnctrl_ctx->net.net_out.out_desc[0].name = net_out_name; 
+// 	nnctrl_ctx->net.net_out.out_desc[0].no_mem = 0; // let nnctrl lib allocate memory for output
+// }
+
+// int cnn_init(nnctrl_ctx_t *nnctrl_ctx, cavalry_ctx_t *cavalry_ctx, const char* model_path, \
+//              const char* net_in_name, const char* net_out_name)
+// {
+//     int rval = 0;
+//     memset(nnctrl_ctx, 0, sizeof(nnctrl_ctx_t));
+
+//     nnctrl_ctx->verbose = 0;
+//     nnctrl_ctx->reuse_mem = 1;
+//     nnctrl_ctx->cache_en = 1;
+//     nnctrl_ctx->buffer_id = g_canvas_id;
+//     nnctrl_ctx->log_level = 0;
+
+//     strcpy(nnctrl_ctx->net.net_file, model_path); 
+
+//     rval = init_net_context(&nnctrl_ctx, &cavalry_ctx, 
+//                             nnctrl_ctx->verbose, nnctrl_ctx->cache_en);
+
+//     set_net_io(nnctrl_ctx, inputName.c_str(), outputName.c_str());
+
+//     rval = init_net(nnctrl_ctx, nnctrl_ctx->verbose, nnctrl_ctx->cache_en, nnctrl_ctx->reuse_mem);
+//     rval = load_net(nnctrl_ctx);
+
+//     if (rval < 0) {
+//         printf("init net context, return %d\n", rval);
+//     }
+//     return rval;
+// }

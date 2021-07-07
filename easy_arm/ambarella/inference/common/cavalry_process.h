@@ -7,18 +7,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "cavalry_ioctl.h"
-#include "cavalry_mem.h"
-
+#include "inference/common/cnn_data_structure.h"
 #include "inference/common/common_log.h"
 
 /**
  * @brief submodule to operate on cavalry driver
  */
-
-typedef struct cavalry_ctx_s {
-    int fd_cavalry;
-} cavalry_ctx_t;
 
 int cavalry_init_context(cavalry_ctx_t *cavalry_ctx, uint8_t verbose);
 

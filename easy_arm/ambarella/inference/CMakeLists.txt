@@ -7,3 +7,5 @@ add_subdirectory(detection2d)
 add_subdirectory(segment)
 
 add_subdirectory(posenet)
+
+add_subdirectory(rec_text)
