@@ -20,4 +20,8 @@ include(cmake/ambacv22_dependencies.cmake)
 #include_directories
 message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
 
-add_subdirectory(inference)
+#build cnn_runtime
+add_subdirectory(cnn_runtime)
+
+#build test cnn
+add_subdirectory(cnn_runtime/tests)
