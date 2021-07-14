@@ -16,7 +16,7 @@ static void image_dir_infer(const std::string &image_dir){
     std::ofstream save_result;
     cv::Mat src_img;
     TextNet textnet_process;
-    if(textnet_process.init(model_path, input_name, output_name, 0.2f) < 0)
+    if(textnet_process.init(model_path, input_name, output_name, 0.1f) < 0)
     {
         std::cout << "TextNet init fail!" << std::endl;
         return;

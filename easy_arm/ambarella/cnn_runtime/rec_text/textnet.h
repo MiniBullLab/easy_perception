@@ -11,12 +11,14 @@ public:
     TextNet();
     ~TextNet();
     int init(const std::string &modelPath, const std::string &inputName, 
-             const std::string &outputName, const float threshold=0.1f);
+             const std::string &outputName, const float threshold=0.3f,
+             const int charCount=11);
     std::string run(const cv::Mat &srcImage);
 
 private:
     cavalry_ctx_t cavalry_ctx;
     nnctrl_ctx_t nnctrl_ctx;
+    int charCount;
     float threshold;
     float *textnetOutput;
 };
