@@ -68,8 +68,8 @@ void image_txt_infer(const std::string &image_dir, const std::string &image_txt_
 int main()
 {
     std::cout << "start..." << std::endl;
-    const std::string image_dir = "";
-    const std::string image_txt_path = "";
+    const std::string image_dir = "./";
+    const std::string image_txt_path = "./val.txt";
     image_txt_infer(image_dir, image_txt_path);
     std::cout << "End of game!!!" << std::endl;
     return 0;

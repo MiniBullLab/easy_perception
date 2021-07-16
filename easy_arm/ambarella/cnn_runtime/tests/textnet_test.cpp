@@ -63,7 +63,7 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
         if(line_data.empty()){
             continue;
         }
-        size_t index = line_data.find_first_of(' ', 0);
+        size_t index = line_data.find_first_of('|', 0);
         std::string image_name = line_data.substr(0, index);
         std::stringstream image_path;
         image_path << image_dir << image_name;
@@ -83,8 +83,11 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
 int main()
 {
     std::cout << "TextNet start..." << std::endl;
-    std::string image_dir = "./test_images/";
-    image_dir_infer(image_dir);
+    const std::string image_dir = "./";
+    const std::string image_txt_path = "./val.txt";
+    image_txt_infer(image_dir, image_txt_path);
+    // std::string image_dir = "./test_images/";
+    // image_dir_infer(image_dir);
     std::cout << "TextNet End of game!!!" << std::endl;
     return 0;
 }
