@@ -10,7 +10,7 @@
 #include <fstream>
 
 const static int maxTextLength = 32;
-const static int classNumber = 37;
+const static int classNumber = 38;
 // const static char characterSet[classNumber] = {' ', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 
 //                                                'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 
 //                                                's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 
@@ -24,7 +24,7 @@ const static int classNumber = 37;
 const static char characterSet[classNumber] = {' ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 
                                                'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 
                                                'U', 'V', 'W', 'X', 'Y', 'Z', '1', '2', '3', '4', '5', 
-                                               '6', '7', '8', '9', '0'};
+                                               '6', '7', '8', '9', '0', ' '};
 
 TextNet::TextNet()
 {
@@ -101,17 +101,14 @@ std::string TextNet::run(const cv::Mat &srcImage)
         }
         if((max_index > 0) && !(row > 0 && max_index == pre_max_index))
         {
-            // std::cout << max_score << std::endl;
-            result += characterSet[max_index];
-            count++;
+            if(characterSet[max_index] != ' ')
+            {
+                // std::cout << max_score << std::endl;
+                result += characterSet[max_index];
+                count++;
+            }
         }
         pre_max_index = max_index;
-        // if(max_index > 0)
-        // {
-        //     std::cout << max_score << std::endl;
-        //     result += characterSet[max_index];
-        //     count++;
-        // }
     }
     return result;
 }

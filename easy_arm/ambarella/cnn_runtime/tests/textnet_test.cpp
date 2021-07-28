@@ -83,7 +83,7 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
 int main()
 {
     std::cout << "TextNet start..." << std::endl;
-    const std::string image_dir = "./";
+    const std::string image_dir = "./JPEGImages/";
     const std::string image_txt_path = "./val.txt";
     image_txt_infer(image_dir, image_txt_path);
     // std::string image_dir = "./test_images/";
