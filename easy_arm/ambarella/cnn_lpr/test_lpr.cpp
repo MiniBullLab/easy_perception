@@ -48,7 +48,7 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <semaphore.h>
-//#include <iav_ioctl.h>
+//include <iav_ioctl.h>
 #include <eazyai.h>
 #include <opencv2/opencv.hpp>
 #include <iostream>
@@ -86,16 +86,16 @@
 
 EA_LOG_DECLARE_LOCAL(EA_LOG_LEVEL_NOTICE);
 
-const static std::string ssd_model_path = "./mobilenetv1_ssd_cavalry.bin";
-const static std::string ssd_priorbox_path = "./lpr_priorbox_fp32.bin";
+const static std::string ssd_model_path = "./lpr/mobilenetv1_ssd_cavalry.bin";
+const static std::string ssd_priorbox_path = "./lpr/lpr_priorbox_fp32.bin";
 const static std::vector<std::string> ssd_input_name = {"data"};
 const static std::vector<std::string> ssd_output_name = {"mbox_loc", "mbox_conf_flatten"};
 
-const static std::string lpr_model_path = "./segfree_inception_cavalry.bin";
+const static std::string lpr_model_path = "./lpr/segfree_inception_cavalry.bin";
 const static std::vector<std::string> lpr_input_name = {"data"};
 const static std::vector<std::string> lpr_output_name = {"prob"};
 
-const static std::string lphm_model_path = "./LPHM_cavalry.bin";
+const static std::string lphm_model_path = "./lpr/LPHM_cavalry.bin";
 const static std::vector<std::string> lphm_input_name = {"data"};
 const static std::vector<std::string> lphm_output_name = {"dense"};
 
@@ -156,8 +156,8 @@ volatile int run_flag = 1;
 static int init_param(global_control_param_t *G_param)
 {
 	int rval = 0;
-
-	memset(&G_param, 0, sizeof(global_control_param_t));
+	std::cout << "init ..." << std::endl;
+	memset(G_param, 0, sizeof(global_control_param_t));
 
 	G_param->channel_id = DEFAULT_CHANNEL_ID;
 	G_param->stream_id = DEFAULT_STREAM_ID;
@@ -179,6 +179,8 @@ static int init_param(global_control_param_t *G_param)
 	G_param->draw_plate_num = DEFAULT_OVERLAY_LICENSE_NUM;
 	G_param->debug_en = 0;
 	G_param->verbose = 0;
+
+	std::cout << "init sucess" << std::endl;
 
 	return rval;
 }
@@ -277,23 +279,24 @@ static int lpr_critical_resource(uint16_t *license_num, bbox_param_t *bbox_param
 static int init_LPR(LPR_ctx_t *LPR_ctx, global_control_param_t *G_param)
 {
 	int rval = 0;
+	std::cout << "init_LPR" << std::endl;
 	do {
-		strcpy(LPR_ctx->LPHM_net_ctx.input_name, lphm_input_name[0].c_str());
-		strcpy(LPR_ctx->LPHM_net_ctx.output_name, lphm_output_name[0].c_str());
-		strcpy(LPR_ctx->LPHM_net_ctx.net_name, lphm_model_path.c_str());
+		LPR_ctx->LPHM_net_ctx.input_name = const_cast<char*>(lphm_input_name[0].c_str());
+	    LPR_ctx->LPHM_net_ctx.output_name = const_cast<char*>(lphm_output_name[0].c_str());
+		LPR_ctx->LPHM_net_ctx.net_name = const_cast<char*>(lphm_model_path.c_str());
 		LPR_ctx->LPHM_net_ctx.net_verbose = G_param->verbose;
 		LPR_ctx->LPHM_net_ctx.net_param.priority = LPR_PRIORITY;
 
-		strcpy(LPR_ctx->LPR_net_ctx.input_name, lpr_input_name[0].c_str());
-		strcpy(LPR_ctx->LPR_net_ctx.output_name, lpr_output_name[0].c_str());
-		strcpy(LPR_ctx->LPR_net_ctx.net_name, lpr_model_path.c_str());
+		LPR_ctx->LPR_net_ctx.input_name = const_cast<char*>(lpr_input_name[0].c_str());
+		LPR_ctx->LPR_net_ctx.output_name = const_cast<char*>(lpr_output_name[0].c_str());
+		LPR_ctx->LPR_net_ctx.net_name = const_cast<char*>(lpr_model_path.c_str());
 		LPR_ctx->LPR_net_ctx.net_verbose = G_param->verbose;
 		LPR_ctx->LPR_net_ctx.net_param.priority = LPR_PRIORITY;
 
 		LPR_ctx->debug_en = G_param->debug_en;
 		RVAL_OK(LPR_init(LPR_ctx));
 	} while (0);
-
+	std::cout << "init_LPR success" << std::endl;
 	return rval;
 }
 
@@ -431,7 +434,7 @@ static int init_ssd(SSD_ctx_t *SSD_ctx, global_control_param_t *G_param,
 	int rval = 0;
 	ssd_net_params_t ssd_net_params;
 	ssd_tf_scale_factors_t scale_factors;
-
+	std::cout << "init_ssd" << std::endl;
 	do {
 		memset(&ssd_net_params, 0, sizeof(ssd_net_params));
 		// set params for ssd_net
@@ -461,7 +464,7 @@ static int init_ssd(SSD_ctx_t *SSD_ctx, global_control_param_t *G_param,
 		RVAL_OK(ssd_net_init(&ssd_net_params, &SSD_ctx->ssd_net_ctx,
 			&SSD_ctx->net_input, &SSD_ctx->vp_result_info));
 	} while (0);
-
+	std::cout << "init_ssd success" << std::endl;
 	return rval;
 }
 
@@ -603,7 +606,7 @@ static int start_ssd_lpr(global_control_param_t *G_param)
 
 	ea_tensor_t *img_tensor = NULL;
 	ea_img_resource_data_t data;
-
+	std::cout << "start_ssd_lpr" << std::endl;
 	do {
 		memset(&lpr_thread_params, 0 , sizeof(lpr_thread_params));
 		memset(&data, 0, sizeof(data));
@@ -626,7 +629,7 @@ static int start_ssd_lpr(global_control_param_t *G_param)
 		rval = pthread_create(&lpr_pthread_id, NULL, run_lpr_pthread, (void*)&lpr_thread_params);
 		RVAL_ASSERT(rval == 0);
 	} while (0);
-
+	std::cout << "start_ssd_lpr success" << std::endl;
 	if (lpr_pthread_id > 0) {
 		pthread_join(lpr_pthread_id, NULL);
 	}
@@ -649,7 +652,7 @@ static void sigstop(int signal_number)
 static int env_init(global_control_param_t *G_param)
 {
 	int rval = 0;;
-
+	std::cout << "env_init" << std::endl;
 	do {
 		RVAL_OK(ea_env_open(EA_ENV_ENABLE_IAV
 			| EA_ENV_ENABLE_CAVALRY
@@ -681,7 +684,7 @@ static int env_init(global_control_param_t *G_param)
 		sem_init(&G_param->sem_readable_buf, 0, 0);
 		RVAL_OK(ea_set_preprocess_priority_on_current_process(VPROC_PRIORITY, EA_VP));
 	} while(0);
-
+	std::cout << "env_init success" << std::endl;
 	return rval;
 }
 
