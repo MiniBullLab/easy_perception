@@ -48,27 +48,26 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <semaphore.h>
-//include <iav_ioctl.h>
+//#include <iav_ioctl.h>
 #include <eazyai.h>
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <vector>
+#include "lib_data_process.h"
 #include "cnn_lpr/lpr/utils.hpp"
 #include "cnn_lpr/lpr/ssd_lpr_common.h"
 #include "cnn_lpr/lpr/state_buffer.h"
-#include "lib_data_process.h"
 #include "cnn_lpr/ssd/ssd.h"
 #include "cnn_lpr/lpr/overlay_tool.h"
-#include "cnn_lpr/lpr/vout_tool.h"
 #include "cnn_lpr/lpr/lpr.hpp"
 
-//#define DISPLAY_ON_OVERLAY
+#include "cnn_lpr/tof/tof_acquisition.h"
 
 #define FILENAME_LENGTH				(256)
 #define MAX_NET_NUM					(16)
 #define DEFAULT_STATE_BUF_NUM		(3)
-#define DEFAULT_STREAM_ID			(0)
-#define DEFAULT_CHANNEL_ID			(0)
+#define DEFAULT_STREAM_ID			(2)
+#define DEFAULT_CHANNEL_ID			(2)
 #define DEFAULT_SSD_LAYER_ID		(1)
 #define DEFAULT_LPR_LAYER_ID		(0)
 #define DEFAULT_RGB_TYPE			(1) /* 0: RGB, 1:BGR */
@@ -152,6 +151,10 @@ enum cavalry_priotiry {
 };
 
 volatile int run_flag = 1;
+volatile int run_ssd = 0;
+volatile int run_lpr = 0;
+
+TOFAcquisition tof_geter;
 
 static int init_param(global_control_param_t *G_param)
 {
@@ -358,11 +361,7 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 			draw_overlay_preprocess(&draw_plate_list, &license_result,
 				bbox_param, G_param);
 			TIME_MEASURE_START(debug_en);
-#ifdef DISPLAY_ON_OVERLAY
 			RVAL_OK(set_overlay_image(img_tensor, &draw_plate_list));
-#else
-			RVAL_OK(set_vout_image(img_tensor, &draw_plate_list));
-#endif
 			TIME_MEASURE_END("[LPR] LPR draw overlay time", debug_en);
 			RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
 			sum_time += (gettimeus() - start_time);
@@ -564,13 +563,8 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 				bbox_list.bbox[i].norm_max_x = scaled_license_plate.norm_max_x;
 				bbox_list.bbox[i].norm_max_y = scaled_license_plate.norm_max_y;
 			}
-#ifdef DISPLAY_ON_OVERLAY
 			RVAL_OK(set_overlay_bbox(&bbox_list));
 			RVAL_OK(show_overlay(dsp_pts));
-#else
-			RVAL_OK(set_vout_bbox(&bbox_list));
-			RVAL_OK(show_vout(dsp_pts));
-#endif
 			TIME_MEASURE_END("[SSD] post-process time", debug_en);
 
 			sum_time += (gettimeus() - start_time);
@@ -596,7 +590,7 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 	return NULL;
 }
 
-static int start_ssd_lpr(global_control_param_t *G_param)
+static int start_all_lpr(global_control_param_t *G_param)
 {
 	int rval = 0;
 	pthread_t ssd_pthread_id = 0;
@@ -606,6 +600,17 @@ static int start_ssd_lpr(global_control_param_t *G_param)
 
 	ea_tensor_t *img_tensor = NULL;
 	ea_img_resource_data_t data;
+
+	if(tof_geter.open_tof() < 0)
+	{
+		return -1;
+	}
+
+	if(tof_geter.start() < 0)
+	{
+		return -1;
+	}
+
 	std::cout << "start_ssd_lpr" << std::endl;
 	do {
 		memset(&lpr_thread_params, 0 , sizeof(lpr_thread_params));
@@ -636,6 +641,7 @@ static int start_ssd_lpr(global_control_param_t *G_param)
 	if (ssd_pthread_id > 0) {
 		pthread_join(ssd_pthread_id, NULL);
 	}
+	tof_geter.stop();
 	printf("Main thread quit.\n");
 
 	return rval;
@@ -657,26 +663,15 @@ static int env_init(global_control_param_t *G_param)
 		RVAL_OK(ea_env_open(EA_ENV_ENABLE_IAV
 			| EA_ENV_ENABLE_CAVALRY
 			| EA_ENV_ENABLE_VPROC
-#ifdef DISPLAY_ON_OVERLAY
-			| EA_ENV_ENABLE_OSD_STREAM
-#else
-			| EA_ENV_ENABLE_OSD_VOUT
-#endif
-			| EA_ENV_ENABLE_NNCTRL));
+			| EA_ENV_ENABLE_NNCTRL
+			| EA_ENV_ENABLE_OSD_STREAM));
 		G_param->img_resource = ea_img_resource_new(EA_PYRAMID,
 			(void *)(unsigned long)G_param->channel_id);
 		RVAL_ASSERT(G_param->img_resource != NULL);
-#ifdef DISPLAY_ON_OVERLAY
 		RVAL_OK(init_overlay_tool(G_param->stream_id,
 			G_param->overlay_x_offset, G_param->overlay_highlight_sec,
 			G_param->overlay_clear_sec, G_param->overlay_text_width_ratio,
 			G_param->draw_plate_num, G_param->debug_en));
-#else
-		RVAL_OK(init_vout_tool(G_param->stream_id,
-			G_param->overlay_x_offset, G_param->overlay_highlight_sec,
-			G_param->overlay_clear_sec, G_param->overlay_text_width_ratio,
-			G_param->draw_plate_num, G_param->debug_en))
-#endif
 		RVAL_OK(init_state_buffer_param(&G_param->ssd_result_buf,
 			G_param->state_buf_num, (uint16_t)sizeof(ea_img_resource_data_t),
 			MAX_DETECTED_LICENSE_NUM, (G_param->debug_en >= INFO_LEVEL)));
@@ -693,11 +688,7 @@ static void env_deinit(global_control_param_t *G_param)
 	pthread_mutex_destroy(&G_param->access_buffer_mutex);
 	sem_destroy(&G_param->sem_readable_buf);
 	deinit_state_buffer_param(&G_param->ssd_result_buf);
-#ifdef DISPLAY_ON_OVERLAY
 	deinit_overlay_tool();
-#else
-	deinit_vout_tool();
-#endif
 	ea_img_resource_free(G_param->img_resource);
 	G_param->img_resource = NULL;
 	ea_env_close();
@@ -717,7 +708,7 @@ int main(int argc, char **argv)
 	do {
 		RVAL_OK(init_param(&G_param));
 		RVAL_OK(env_init(&G_param));
-		RVAL_OK(start_ssd_lpr(&G_param));
+		RVAL_OK(start_all_lpr(&G_param));
 	} while (0);
 	env_deinit(&G_param);
 	printf("All Quit.\n");

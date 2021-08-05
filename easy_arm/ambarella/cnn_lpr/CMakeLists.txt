@@ -4,6 +4,8 @@ PROJECT(cnn_lpr)
 include_directories(${amba_arm_BINARY_DIR})
 include_directories(${amba_arm_SOURCE_DIR})
 
+add_definitions(-D_USE_AMBAR_)
+
 #collect source files
 file(GLOB LPR_SRCS
     "${PROJECT_SOURCE_DIR}/ssd/*.c"
@@ -12,6 +14,7 @@ file(GLOB LPR_SRCS
     "${PROJECT_SOURCE_DIR}/lpr_third_party/FineMapping.cpp"
     "${PROJECT_SOURCE_DIR}/lpr_third_party/FastDeskew.cpp"
     "${PROJECT_SOURCE_DIR}/lpr_third_party/Pipeline.cpp"
+    "${PROJECT_SOURCE_DIR}/tof/*.cpp"
 	)
 
 add_executable(test_lpr test_lpr.cpp ${LPR_SRCS})
@@ -38,5 +41,9 @@ target_link_libraries(test_lpr
                       textinsert_v2
                       bz2
                       freetype
+                      phase
+                      cvlib
+                      dl
+                      rt
                       pthread)
 

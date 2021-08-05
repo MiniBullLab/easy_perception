@@ -21,7 +21,6 @@ link_directories(${AMBARELLA_DIR}/out/cv22_walnut/packages/nnctrl)
 
 #cavalry
 include_directories(${AMBARELLA_DIR}/include/cavalry)
-link_directories(${AMBARELLA_DIR}/out/cv22_walnut/packages/nnctrl)
 include_directories(${AMBARELLA_DIR}/packages/cavalry_mem/inc)
 link_directories(${AMBARELLA_DIR}/out/cv22_walnut/packages/cavalry_mem)
 

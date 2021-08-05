@@ -15,7 +15,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 #include dependencies
-include(cmake/ambacv22_3_dependencies.cmake)
+include(cmake/ambacv25_3_dependencies.cmake)
 
 #include_directories
 message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
