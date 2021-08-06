@@ -152,7 +152,6 @@ enum cavalry_priotiry {
 
 volatile int run_flag = 1;
 volatile int run_ssd = 0;
-volatile int run_lpr = 0;
 
 TOFAcquisition tof_geter;
 
@@ -347,38 +346,41 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
 
 		while (run_flag) {
-			RVAL_OK(lpr_critical_resource(&license_num, bbox_param,
+			while(run_ssd > 0)
+			{
+				RVAL_OK(lpr_critical_resource(&license_num, bbox_param,
 				ssd_mid_buf, G_param));
-			start_time = gettimeus();
-			data = (ea_img_resource_data_t *)ssd_mid_buf->img_resource_addr;
-			if (license_num == 0) {
+				start_time = gettimeus();
+				data = (ea_img_resource_data_t *)ssd_mid_buf->img_resource_addr;
+				if (license_num == 0) {
+					RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
+					continue;
+				}
+				img_tensor = data->tensor_group[G_param->lpr_pyd_idx];
+				RVAL_OK(LPR_run(&LPR_ctx, img_tensor, license_num,
+					(void*)bbox_param, &license_result));
+				draw_overlay_preprocess(&draw_plate_list, &license_result,
+					bbox_param, G_param);
+				TIME_MEASURE_START(debug_en);
+				RVAL_OK(set_overlay_image(img_tensor, &draw_plate_list));
+				TIME_MEASURE_END("[LPR] LPR draw overlay time", debug_en);
 				RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
-				continue;
-			}
-			img_tensor = data->tensor_group[G_param->lpr_pyd_idx];
-			RVAL_OK(LPR_run(&LPR_ctx, img_tensor, license_num,
-				(void*)bbox_param, &license_result));
-			draw_overlay_preprocess(&draw_plate_list, &license_result,
-				bbox_param, G_param);
-			TIME_MEASURE_START(debug_en);
-			RVAL_OK(set_overlay_image(img_tensor, &draw_plate_list));
-			TIME_MEASURE_END("[LPR] LPR draw overlay time", debug_en);
-			RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
-			sum_time += (gettimeus() - start_time);
-			++loop_count;
-			average_license_num += license_num;
-			if (loop_count == TIME_MEASURE_LOOPS) {
-				printf("[%d loops] LPR average time license_num[%f]: %f ms, per license %f ms\n",
-					TIME_MEASURE_LOOPS, average_license_num / TIME_MEASURE_LOOPS,
-					sum_time / (1000 * TIME_MEASURE_LOOPS),
-					((average_license_num > 0.0f) ? (sum_time / (1000 * average_license_num)) : 0.0f));
-				sum_time = 0;
-				loop_count = 1;
-				average_license_num = license_num;
-			}
-			if (debug_en == DEBUG_LEVEL) {
-				run_flag = 0;
-				printf("In debug mode, stop after one loop!\n");
+				sum_time += (gettimeus() - start_time);
+				++loop_count;
+				average_license_num += license_num;
+				if (loop_count == TIME_MEASURE_LOOPS) {
+					printf("[%d loops] LPR average time license_num[%f]: %f ms, per license %f ms\n",
+						TIME_MEASURE_LOOPS, average_license_num / TIME_MEASURE_LOOPS,
+						sum_time / (1000 * TIME_MEASURE_LOOPS),
+						((average_license_num > 0.0f) ? (sum_time / (1000 * average_license_num)) : 0.0f));
+					sum_time = 0;
+					loop_count = 1;
+					average_license_num = license_num;
+				}
+				if (debug_en == DEBUG_LEVEL) {
+					run_flag = 0;
+					printf("In debug mode, stop after one loop!\n");
+				}
 			}
 		}
 	} while (0);
@@ -476,6 +478,7 @@ static void deinit_ssd(SSD_ctx_t *SSD_ctx)
 static void *run_ssd_pthread(void *ssd_thread_params)
 {
 	int rval = 0;
+	unsigned long long int frame_number = 0;
 	uint32_t i = 0;
 	ssd_lpr_thread_params_t *ssd_param =
 		(ssd_lpr_thread_params_t*)ssd_thread_params;
@@ -519,7 +522,12 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 			RVAL_ASSERT(data.tensor_num >= 1);
 			img_tensor = data.tensor_group[G_param->ssd_pyd_idx];
 			dsp_pts = data.dsp_pts;
-			SAVE_TENSOR_IN_DEBUG_MODE("SSD_pyd.jpg", img_tensor, debug_en);
+			// SAVE_TENSOR_IN_DEBUG_MODE("SSD_pyd.jpg", img_tensor, debug_en);
+			if(frame_number % 40 == 0)
+			{
+				SAVE_TENSOR_GROUP_IN_DEBUG_MODE("image", frame_number, img_tensor, 3);
+			}
+			frame_number++;
 
 			start_time = gettimeus();
 
@@ -590,6 +598,56 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 	return NULL;
 }
 
+static int dump_ply(const char* save_path, const TOFAcquisition::PointCloud &src_cloud)
+{
+	char ply_header[100];
+	sprintf(ply_header, "element vertex %ld\n", src_cloud.size());
+	FILE *fptr;
+	fptr = fopen(save_path, "w");
+
+	fprintf(fptr, "ply\n");
+	fprintf(fptr, "format ascii 1.0\n");
+	fprintf(fptr, "%s", ply_header);
+	fprintf(fptr, "property double x\nproperty double y\nproperty double z\n");
+	fprintf(fptr, "property uchar red\nproperty uchar green\nproperty uchar blue\n");
+	fprintf(fptr, "end_header\n");
+	for (size_t i = 0; i < src_cloud.size(); i++)
+	{
+		fprintf(fptr, "%f %f %f ", src_cloud[i].x, src_cloud[i].y, src_cloud[i].z);
+		fprintf(fptr, "%d %d %d\n", 255, 0, 0);
+	}
+	fclose(fptr);
+	std::cout << "save ply OK..." << std::endl;
+	return 0;
+}
+
+static void point_cloud_process()
+{
+	unsigned long long int frame_number = 0;
+	TOFAcquisition::PointCloud src_cloud;
+	while(run_flag > 0)
+	{
+		tof_geter.get_tof_data(src_cloud);
+		frame_number++;
+		if(src_cloud.size() > 0)
+		{
+			run_ssd = 1;
+			if(frame_number % 10 == 0)
+			{
+				std::stringstream filename;
+				filename << "point_cloud" << frame_number << ".ply";
+				dump_ply(filename.str().c_str(), src_cloud);
+			}
+		}
+		else
+		{
+			run_ssd = 0;
+		}
+		std::cout << "Point Cloud:" << frame_number << std::endl;
+	}
+	std::cout << "stop point cloud process" << std::endl;
+}
+
 static int start_all_lpr(global_control_param_t *G_param)
 {
 	int rval = 0;
@@ -600,16 +658,6 @@ static int start_all_lpr(global_control_param_t *G_param)
 
 	ea_tensor_t *img_tensor = NULL;
 	ea_img_resource_data_t data;
-
-	if(tof_geter.open_tof() < 0)
-	{
-		return -1;
-	}
-
-	if(tof_geter.start() < 0)
-	{
-		return -1;
-	}
 
 	std::cout << "start_ssd_lpr" << std::endl;
 	do {
@@ -635,23 +683,30 @@ static int start_all_lpr(global_control_param_t *G_param)
 		RVAL_ASSERT(rval == 0);
 	} while (0);
 	std::cout << "start_ssd_lpr success" << std::endl;
+
+	if(tof_geter.start() < 0)
+	{
+		rval = -1;
+		run_flag = 0;
+	}
+	std::cout << "start tof success" << std::endl;
+	point_cloud_process();
+
 	if (lpr_pthread_id > 0) {
 		pthread_join(lpr_pthread_id, NULL);
 	}
 	if (ssd_pthread_id > 0) {
 		pthread_join(ssd_pthread_id, NULL);
 	}
-	tof_geter.stop();
-	printf("Main thread quit.\n");
-
+	std::cout << "Main thread quit" << std::endl;
 	return rval;
 }
 
 static void sigstop(int signal_number)
 {
 	run_flag = 0;
+	tof_geter.stop();
 	printf("sigstop msg, exit live mode\n");
-
 	return;
 }
 
@@ -704,15 +759,16 @@ int main(int argc, char **argv)
 	signal(SIGINT, sigstop);
 	signal(SIGQUIT, sigstop);
 	signal(SIGTERM, sigstop);
-
-	do {
-		RVAL_OK(init_param(&G_param));
-		RVAL_OK(env_init(&G_param));
-		RVAL_OK(start_all_lpr(&G_param));
-	} while (0);
-	env_deinit(&G_param);
+	if(tof_geter.open_tof() == 0)
+	{
+		do {
+			RVAL_OK(init_param(&G_param));
+			RVAL_OK(env_init(&G_param));
+			RVAL_OK(start_all_lpr(&G_param));
+		}while(0);
+		env_deinit(&G_param);
+	}
 	printf("All Quit.\n");
-
 	return rval;
 }
 

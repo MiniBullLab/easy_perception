@@ -538,9 +538,7 @@ static int map_dsp_buffer(void)
 	if (dsp_mem == MAP_FAILED) {
 		printf("mmap dsp_mem (%d) failed\n", errno);
 		ret = -1;
-		return ret;
 	}
-
 	return ret;
 }
 
@@ -950,7 +948,6 @@ static void sigstop()
 		tof_mem.calib_data = NULL;
 	}
 	tof_decode_deinit();
-	exit(1);
 }
 
 typedef enum {
@@ -966,10 +963,7 @@ static int map_buffers(void)
 	int ret = 0;
     clut_start = 20;
     clut_end = 200;
-	if (map_dsp_buffer() < 0) {
-		ret = -1;
-		printf("map_dsp_buffer\n");
-	}
+	ret = map_dsp_buffer();
 	return ret;
 }
 
@@ -1355,6 +1349,8 @@ static void *run_tof_pthread(void* data)
 
 		do_tof_process(tof_ptr, win, &p2dio);
 
+		put_buffer(win, tof_ptr);
+
 		if (debug == DEBUG_TIME) {
 			clock_gettime(CLOCK_REALTIME, &time3);
 			debug_time(&time0, &time1, &time2, &time3);
@@ -1376,8 +1372,20 @@ TOFAcquisition::TOFAcquisition()
 }
 
 TOFAcquisition::~TOFAcquisition()
-{
-    stop();
+{	
+	if(run_tof)
+	{
+		stop();
+	}
+	pthread_mutex_destroy(&tof_buffer.lock);
+    pthread_cond_destroy(&tof_buffer.notempty);
+    pthread_cond_destroy(&tof_buffer.notfull);
+	sigstop();
+	if(fd_iav >= 0)
+	{
+		close(fd_iav);
+		fd_iav = -1;
+	}
 }
 
 int TOFAcquisition::open_tof()
@@ -1385,14 +1393,16 @@ int TOFAcquisition::open_tof()
     if(fd_iav >= 0)
     {
         close(fd_iav);
+		fd_iav = -1;
+		printf("close /dev/iav\n");
     }
     fd_iav = open("/dev/iav", O_RDWR, 0);
 	if (fd_iav < 0) {
-		printf("/dev/iav!\n");
+		printf("open /dev/iav fail\n");
         return -1;
 	}
     if (map_buffers() < 0) {
-		printf("map_buffers\n");
+		printf("map_buffers error\n");
         return -1;
 	}
 	pthread_mutex_init(&tof_buffer.lock, NULL);  
@@ -1400,6 +1410,8 @@ int TOFAcquisition::open_tof()
     pthread_cond_init(&tof_buffer.notfull, NULL);  
     tof_buffer.readpos = 0;  
     tof_buffer.writepos = 0;
+	printf("TOF init success\n");
+	return 0;
 }
 
 int TOFAcquisition::start()
@@ -1414,13 +1426,13 @@ int TOFAcquisition::stop()
 {
 	int ret = 0;
 	run_tof = 0;
+	pthread_cond_signal(&tof_buffer.notfull);
+	pthread_cond_signal(&tof_buffer.notempty);
+	pthread_mutex_unlock(&tof_buffer.lock);
 	if (pthread_id > 0) {
 		pthread_join(pthread_id, NULL);
 	}
-	if(fd_iav >= 0)
-	{
-		ret = close(fd_iav);
-	}
+	std::cout << "stop TOF success" << std::endl;
 	return ret;
 }
 
