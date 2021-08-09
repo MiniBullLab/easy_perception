@@ -523,11 +523,11 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 			img_tensor = data.tensor_group[G_param->ssd_pyd_idx];
 			dsp_pts = data.dsp_pts;
 			// SAVE_TENSOR_IN_DEBUG_MODE("SSD_pyd.jpg", img_tensor, debug_en);
-			if(frame_number % 40 == 0)
-			{
-				SAVE_TENSOR_GROUP_IN_DEBUG_MODE("image", frame_number, img_tensor, 3);
-			}
-			frame_number++;
+			// if(frame_number % 40 == 0)
+			// {
+			// 	SAVE_TENSOR_GROUP_IN_DEBUG_MODE("image", frame_number, img_tensor, 3);
+			// }
+			// frame_number++;
 
 			start_time = gettimeus();
 
@@ -608,7 +608,7 @@ static int dump_ply(const char* save_path, const TOFAcquisition::PointCloud &src
 	fprintf(fptr, "ply\n");
 	fprintf(fptr, "format ascii 1.0\n");
 	fprintf(fptr, "%s", ply_header);
-	fprintf(fptr, "property double x\nproperty double y\nproperty double z\n");
+	fprintf(fptr, "property float x\nproperty float y\nproperty float z\n");
 	fprintf(fptr, "property uchar red\nproperty uchar green\nproperty uchar blue\n");
 	fprintf(fptr, "end_header\n");
 	for (size_t i = 0; i < src_cloud.size(); i++)
