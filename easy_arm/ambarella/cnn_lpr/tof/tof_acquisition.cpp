@@ -1447,7 +1447,7 @@ void TOFAcquisition::get_tof_data(PointCloud &point_cloud)
 	for(int i = 0; i < MAX_POINT_CLOUD; i++)
 	{
 		if(tof_buffer.buffer_z[tof_buffer.readpos][i] > 0.5f && \
-			tof_buffer.buffer_z[tof_buffer.readpos][i] <= 3.0f)
+			tof_buffer.buffer_z[tof_buffer.readpos][i] <= 2.0f)
 			{
 				struct Point temp_point;
 				temp_point.x = tof_buffer.buffer_x[tof_buffer.readpos][i];

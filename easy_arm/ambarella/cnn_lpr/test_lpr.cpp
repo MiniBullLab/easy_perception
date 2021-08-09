@@ -629,7 +629,7 @@ static void point_cloud_process()
 	{
 		tof_geter.get_tof_data(src_cloud);
 		frame_number++;
-		if(src_cloud.size() > 0)
+		if(src_cloud.size() > 1000)
 		{
 			run_ssd = 1;
 			if(frame_number % 10 == 0)
