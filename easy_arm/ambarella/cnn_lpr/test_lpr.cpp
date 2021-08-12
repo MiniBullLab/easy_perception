@@ -48,7 +48,7 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <semaphore.h>
-//#include <iav_ioctl.h>
+#include <iav_ioctl.h>
 #include <eazyai.h>
 #include <opencv2/opencv.hpp>
 #include <iostream>
@@ -97,6 +97,12 @@ const static std::vector<std::string> lpr_output_name = {"prob"};
 const static std::string lphm_model_path = "./lpr/LPHM_cavalry.bin";
 const static std::vector<std::string> lphm_input_name = {"data"};
 const static std::vector<std::string> lphm_output_name = {"dense"};
+
+const static std::string bg_point_cloud_file = "./bg.bin";
+
+static std::string lpr_result = "";
+
+static pthread_mutex_t result_mutex;
 
 typedef struct global_control_param_s {
 	// cmd line param
@@ -361,6 +367,16 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 					(void*)bbox_param, &license_result));
 				draw_overlay_preprocess(&draw_plate_list, &license_result,
 					bbox_param, G_param);
+				if(license_result.license_num > 0)
+				{
+					pthread_mutex_lock(&result_mutex);
+					if (license_result.license_info[0].conf > G_param->recg_threshold && \
+						strlen(license_result.license_info[0].text) == CHINESE_LICENSE_STR_LEN)
+						{
+							lpr_result = license_result.license_info[0].text;
+						}
+					pthread_mutex_unlock(&result_mutex);
+				}
 				TIME_MEASURE_START(debug_en);
 				RVAL_OK(set_overlay_image(img_tensor, &draw_plate_list));
 				TIME_MEASURE_END("[LPR] LPR draw overlay time", debug_en);
@@ -478,7 +494,7 @@ static void deinit_ssd(SSD_ctx_t *SSD_ctx)
 static void *run_ssd_pthread(void *ssd_thread_params)
 {
 	int rval = 0;
-	unsigned long long int frame_number = 0;
+	// unsigned long long int frame_number = 0;
 	uint32_t i = 0;
 	ssd_lpr_thread_params_t *ssd_param =
 		(ssd_lpr_thread_params_t*)ssd_thread_params;
@@ -613,7 +629,7 @@ static int dump_ply(const char* save_path, const TOFAcquisition::PointCloud &src
 	fprintf(fptr, "end_header\n");
 	for (size_t i = 0; i < src_cloud.size(); i++)
 	{
-		fprintf(fptr, "%f %f %f ", src_cloud[i].x, src_cloud[i].y, src_cloud[i].z);
+		fprintf(fptr, "%f %f %f\n", src_cloud[i].x, src_cloud[i].y, src_cloud[i].z);
 		fprintf(fptr, "%d %d %d\n", 255, 0, 0);
 	}
 	fclose(fptr);
@@ -621,22 +637,133 @@ static int dump_ply(const char* save_path, const TOFAcquisition::PointCloud &src
 	return 0;
 }
 
+static int dump_bin(const std::string &save_path, const TOFAcquisition::PointCloud &src_cloud)
+{
+	std::ofstream out_file(save_path, std::ios::binary);
+	for (size_t i = 0; i < src_cloud.size(); i++)
+	{
+		float data[3];
+		data[0] = src_cloud[i].x;
+        data[1] = src_cloud[i].y;
+        data[2] = src_cloud[i].z;
+		out_file.write(reinterpret_cast<char*>(data), sizeof(data));
+	}
+	out_file.close();
+	std::cout << "save bin OK..." << std::endl;
+	return 0;
+}
+
+static int read_bin(const std::string &file_path, TOFAcquisition::PointCloud &result_cloud)
+{
+	float data[3] = {0};
+	std::ifstream in_file(file_path, std::ios::in|std::ios::binary);
+	if(!in_file)
+    {
+        std::cout << file_path << " open error!" << std::endl;
+        return -1;
+    }
+	result_cloud.clear();
+	while(in_file.read(reinterpret_cast<char*>(data), sizeof(data)))
+	{
+		TOFAcquisition::Point point;
+		point.x = data[0];
+		point.y = data[1];
+		point.z = data[2];
+		result_cloud.push_back(point);
+	}
+	in_file.close();
+	std::cout << "read bin OK..." << std::endl;
+	return 0;
+}
+
+static int compute_point_count(const TOFAcquisition::PointCloud &bg_cloud, TOFAcquisition::PointCloud &src_cloud)
+{
+	int result = 0;
+	float min_dist = 1000;
+	float temp_dist = 0;
+	for (size_t i = 0; i < src_cloud.size(); i++)
+	{
+		min_dist = 1000;
+		for (size_t j = 0; j < bg_cloud.size(); j++)
+		{
+			temp_dist = abs(src_cloud[i].z - bg_cloud[j].z);
+			if (temp_dist < min_dist)
+			{
+				min_dist = temp_dist;
+			}
+		}
+		if(min_dist > 0.1f)
+		{
+			result++;
+		}
+	}
+	return result;
+}
+
+static void vote_in_out(const std::vector<int> &point_cout_list)
+{
+	int in_count = 0;
+	int out_count = 0;
+	for(size_t i = 1; i < point_cout_list.size(); i++)
+	{
+		if(point_cout_list[i] > point_cout_list[i-1])
+		{
+			in_count++;
+		}
+		else if(point_cout_list[i] < point_cout_list[i-1])
+		{
+			out_count++;
+		}
+	}
+	pthread_mutex_lock(&result_mutex);
+	if(in_count > out_count)
+	{
+		if(lpr_result != "")
+		{
+			std::cout << "car in:" << lpr_result << std::endl;
+			lpr_result = "";
+		}
+	}
+	else if(in_count < out_count)
+	{
+		if(lpr_result != "")
+		{
+			std::cout << "car out:" << lpr_result << std::endl;
+			lpr_result = "";
+		}
+	}
+	pthread_mutex_unlock(&result_mutex);
+}
+
 static void point_cloud_process()
 {
+	int point_count = 0;
 	unsigned long long int frame_number = 0;
+	std::vector<int> point_cout_list;
 	TOFAcquisition::PointCloud src_cloud;
+	TOFAcquisition::PointCloud bg_cloud;
+	point_cout_list.clear();
+	read_bin(bg_point_cloud_file, bg_cloud);
 	while(run_flag > 0)
 	{
 		tof_geter.get_tof_data(src_cloud);
 		frame_number++;
-		if(src_cloud.size() > 1000)
+		if(src_cloud.size() > 10)
 		{
 			run_ssd = 1;
+			if(frame_number % 20 == 0)
+			{
+				vote_in_out(point_cout_list);
+				point_cout_list.clear();
+			}
+			point_count = compute_point_count(bg_cloud, src_cloud);
+			point_cout_list.push_back(point_count);
+
 			if(frame_number % 10 == 0)
 			{
 				std::stringstream filename;
-				filename << "point_cloud" << frame_number << ".ply";
-				dump_ply(filename.str().c_str(), src_cloud);
+				filename << "point_cloud" << frame_number << ".bin";
+				dump_bin(filename.str(), src_cloud);
 			}
 		}
 		else
@@ -661,6 +788,7 @@ static int start_all_lpr(global_control_param_t *G_param)
 
 	std::cout << "start_ssd_lpr" << std::endl;
 	do {
+		pthread_mutex_init(&result_mutex, NULL);
 		memset(&lpr_thread_params, 0 , sizeof(lpr_thread_params));
 		memset(&data, 0, sizeof(data));
 		RVAL_OK(ea_img_resource_hold_data(G_param->img_resource, &data));
@@ -698,6 +826,7 @@ static int start_all_lpr(global_control_param_t *G_param)
 	if (ssd_pthread_id > 0) {
 		pthread_join(ssd_pthread_id, NULL);
 	}
+	pthread_mutex_destroy(&result_mutex);
 	std::cout << "Main thread quit" << std::endl;
 	return rval;
 }

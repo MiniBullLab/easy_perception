@@ -1438,6 +1438,14 @@ int TOFAcquisition::stop()
 
 void TOFAcquisition::get_tof_data(PointCloud &point_cloud)
 {
+	int i, j, index;
+	float max_dst = 0;
+	if (sensor_type == SENSOR_IMX316) {
+		max_dst = MAX_DIST_316;
+	} else {
+		max_dst = MAX_DIST_456;
+	}
+	depth_map.clear();
 	point_cloud.clear(); 
     pthread_mutex_lock(&tof_buffer.lock);  
     if (tof_buffer.writepos == tof_buffer.readpos)  
@@ -1447,13 +1455,21 @@ void TOFAcquisition::get_tof_data(PointCloud &point_cloud)
 	for(int i = 0; i < MAX_POINT_CLOUD; i++)
 	{
 		if(tof_buffer.buffer_z[tof_buffer.readpos][i] > 0.5f && \
-			tof_buffer.buffer_z[tof_buffer.readpos][i] <= 2.0f)
+			tof_buffer.buffer_z[tof_buffer.readpos][i] <= 3.0f)
 			{
 				struct Point temp_point;
 				temp_point.x = tof_buffer.buffer_x[tof_buffer.readpos][i];
 				temp_point.y = tof_buffer.buffer_y[tof_buffer.readpos][i];
 				temp_point.z = tof_buffer.buffer_z[tof_buffer.readpos][i];
 				point_cloud.push_back(temp_point);
+			}
+		if (tof_buffer.buffer_z[tof_buffer.readpos][i] > max_dst || \
+				(tof_buffer.buffer_z[tof_buffer.readpos][i] == 0)) {
+				depth_map.push_back(0);
+			} 
+			else 
+			{
+				depth_map.push_back((unsigned char)(tof_buffer.buffer_z[tof_buffer.readpos][i] * 255 / max_dst));
 			}
 	} 
     tof_buffer.readpos++;  

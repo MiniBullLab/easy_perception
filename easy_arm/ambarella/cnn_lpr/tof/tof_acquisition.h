@@ -27,6 +27,7 @@ public:
 
 private:
     pthread_t pthread_id;
+    std::vector<unsigned char> depth_map;
 };
 
 #endif // _TOF_ACQUISITION_H_
