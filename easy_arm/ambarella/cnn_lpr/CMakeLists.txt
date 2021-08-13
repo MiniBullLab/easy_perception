@@ -7,6 +7,11 @@ include_directories(${amba_arm_SOURCE_DIR})
 add_definitions(-D_USE_AMBAR_)
 
 #collect source files
+file(GLOB UTILITY_SRCS
+    "${amba_arm_SOURCE_DIR}/utility/*.cpp"
+)
+
+#collect source files
 file(GLOB LPR_SRCS
     "${PROJECT_SOURCE_DIR}/ssd/*.c"
     "${PROJECT_SOURCE_DIR}/lpr/*.cpp"
@@ -17,7 +22,7 @@ file(GLOB LPR_SRCS
     "${PROJECT_SOURCE_DIR}/tof/*.cpp"
 	)
 
-add_executable(test_lpr test_lpr.cpp ${LPR_SRCS})
+add_executable(test_lpr test_lpr.cpp ${LPR_SRCS} ${UTILITY_SRCS})
 target_link_libraries(test_lpr
                       opencv_core
                       opencv_imgcodecs

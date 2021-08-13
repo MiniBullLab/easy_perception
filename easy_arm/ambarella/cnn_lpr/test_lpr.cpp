@@ -63,6 +63,8 @@
 
 #include "cnn_lpr/tof/tof_acquisition.h"
 
+#include "utility/utils.h"
+
 #define FILENAME_LENGTH				(256)
 #define MAX_NET_NUM					(16)
 #define DEFAULT_STATE_BUF_NUM		(3)
@@ -692,7 +694,7 @@ static int compute_point_count(const TOFAcquisition::PointCloud &bg_cloud, TOFAc
 				min_dist = temp_dist;
 			}
 		}
-		if(min_dist > 0.1f)
+		if(min_dist >= 0.1f)
 		{
 			result++;
 		}
@@ -704,13 +706,15 @@ static void vote_in_out(const std::vector<int> &point_cout_list)
 {
 	int in_count = 0;
 	int out_count = 0;
+	int diff_count = 0;
 	for(size_t i = 1; i < point_cout_list.size(); i++)
 	{
-		if(point_cout_list[i] > point_cout_list[i-1])
+		diff_count = point_cout_list[i] - point_cout_list[i-1];
+		if(diff_count > 10)
 		{
 			in_count++;
 		}
-		else if(point_cout_list[i] < point_cout_list[i-1])
+		else if(diff_count < -10)
 		{
 			out_count++;
 		}
@@ -735,6 +739,43 @@ static void vote_in_out(const std::vector<int> &point_cout_list)
 	pthread_mutex_unlock(&result_mutex);
 }
 
+static void offline_point_cloud_process()
+{
+	std::string cloud_dir = "./point_cloud/";
+	std::vector<std::string> cloud_files;
+	int point_count = 0;
+	unsigned long long int frame_number = 0;
+	std::vector<int> point_cout_list;
+	TOFAcquisition::PointCloud src_cloud;
+	TOFAcquisition::PointCloud bg_cloud;
+	point_cout_list.clear();
+	read_bin(bg_point_cloud_file, bg_cloud);
+	ListImages(cloud_dir, cloud_files);
+    std::cout << "total Test cloud : " << cloud_files.size() << std::endl;
+	while(run_flag > 0)
+	{
+		for (size_t index = 0; index < cloud_files.size(); index++) {
+			std::stringstream temp_str;
+        	temp_str << cloud_dir << cloud_files[index];
+			std::cout << temp_str.str() << std::endl;
+			read_bin(temp_str.str(), src_cloud);
+			if(src_cloud.size() > 10)
+			{
+				run_ssd = 1;
+				if(frame_number % 10 == 0)
+				{
+					vote_in_out(point_cout_list);
+					point_cout_list.clear();
+				}
+				point_count = compute_point_count(bg_cloud, src_cloud);
+				std::cout << "point count:" << point_count << std::endl;
+				if(point_count > 10)
+					point_cout_list.push_back(point_count);
+			}
+		}
+	}
+}
+
 static void point_cloud_process()
 {
 	int point_count = 0;
@@ -751,20 +792,20 @@ static void point_cloud_process()
 		if(src_cloud.size() > 10)
 		{
 			run_ssd = 1;
-			if(frame_number % 20 == 0)
-			{
-				vote_in_out(point_cout_list);
-				point_cout_list.clear();
-			}
-			point_count = compute_point_count(bg_cloud, src_cloud);
-			point_cout_list.push_back(point_count);
+			// if(frame_number % 20 == 0)
+			// {
+			// 	vote_in_out(point_cout_list);
+			// 	point_cout_list.clear();
+			// }
+			// point_count = compute_point_count(bg_cloud, src_cloud);
+			// point_cout_list.push_back(point_count);
 
-			if(frame_number % 10 == 0)
-			{
-				std::stringstream filename;
-				filename << "point_cloud" << frame_number << ".bin";
-				dump_bin(filename.str(), src_cloud);
-			}
+			// if(frame_number % 10 == 0)
+			// {
+			// 	std::stringstream filename;
+			// 	filename << "point_cloud" << frame_number << ".bin";
+			// 	dump_bin(filename.str(), src_cloud);
+			// }
 		}
 		else
 		{
@@ -818,7 +859,8 @@ static int start_all_lpr(global_control_param_t *G_param)
 		run_flag = 0;
 	}
 	std::cout << "start tof success" << std::endl;
-	point_cloud_process();
+	//point_cloud_process();
+	offline_point_cloud_process();
 
 	if (lpr_pthread_id > 0) {
 		pthread_join(lpr_pthread_id, NULL);

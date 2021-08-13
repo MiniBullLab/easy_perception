@@ -3,7 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <opencv2/imgcodecs.hpp>
-#include "cnn_runtime/utility/utils.h"
+#include "utility/utils.h"
 #include "cnn_runtime/pose/posenet.h"
 
 #include "IOdevice.hpp"

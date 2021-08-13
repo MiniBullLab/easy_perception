@@ -90,7 +90,7 @@ void ListImages(std::string const &path, std::vector<std::string> &images) {
             std::string name = entry->d_name;
             std::string ext = name.substr(name.find_last_of(".") + 1);
             if ((ext == "JPEG") || (ext == "jpeg") || (ext == "JPG") ||
-                (ext == "jpg") || (ext == "PNG") || (ext == "png") || (ext == "420")) {
+                (ext == "jpg") || (ext == "PNG") || (ext == "png") || (ext == "420") || (ext == "bin")) {
                 images.push_back(name);
             }
         }

@@ -6,7 +6,7 @@ include_directories(${amba_arm_SOURCE_DIR})
 
 #collect source files
 file(GLOB UTILITY_SRCS
-    "${amba_arm_SOURCE_DIR}/cnn_runtime/utility/*.cpp"
+    "${amba_arm_SOURCE_DIR}/utility/*.cpp"
 )
 
 add_executable(textnet_test textnet_test.cpp ${UTILITY_SRCS})

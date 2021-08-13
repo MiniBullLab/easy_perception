@@ -1,7 +1,7 @@
 #include <iostream>
 #include <sstream>
 #include <opencv2/imgcodecs.hpp>
-#include "cnn_runtime/utility/utils.h"
+#include "utility/utils.h"
 #include "cnn_runtime/rec_text/textnet.h"
 
 const static std::string model_path = "./TextNet.bin";
