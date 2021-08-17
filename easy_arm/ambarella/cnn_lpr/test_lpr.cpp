@@ -85,6 +85,9 @@
 #define CHINESE_LICENSE_STR_LEN		(9)
 #define TIME_MEASURE_LOOPS			(100)
 
+#define DEPTH_WIDTH (240)
+#define DEPTH_HEIGTH (180)
+
 EA_LOG_DECLARE_LOCAL(EA_LOG_LEVEL_NOTICE);
 
 const static std::string ssd_model_path = "./lpr/mobilenetv1_ssd_cavalry.bin";
@@ -104,7 +107,9 @@ const static std::string bg_point_cloud_file = "./bg.bin";
 
 static std::string lpr_result = "";
 
+volatile int has_lpr = 0;
 static pthread_mutex_t result_mutex;
+static pthread_mutex_t ssd_mutex;
 
 typedef struct global_control_param_s {
 	// cmd line param
@@ -159,7 +164,7 @@ enum cavalry_priotiry {
 };
 
 volatile int run_flag = 1;
-volatile int run_ssd = 0;
+volatile int run_lpr = 0;
 
 TOFAcquisition tof_geter;
 
@@ -237,12 +242,12 @@ static void draw_overlay_preprocess(draw_plate_list_t *draw_plate_list,
 			plates[draw_num].text[sizeof(plates[draw_num].text) - 1] = '\0';
 			++draw_num;
 //			if (G_param->debug_en >= INFO_LEVEL) {
-			if (1) {
-				printf("********************************************************\n");
-				printf("\nDrawed license: %s, conf: %f\n\n",
-					license_info[i].text, license_info[i].conf);
-				printf("********************************************************\n");
-			}
+			// if (1) {
+			// 	printf("********************************************************\n");
+			// 	printf("\nDrawed license: %s, conf: %f\n\n",
+			// 		license_info[i].text, license_info[i].conf);
+			// 	printf("********************************************************\n");
+			// }
 		}
 	}
 	draw_plate_list->license_num = draw_num;
@@ -354,7 +359,7 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
 
 		while (run_flag) {
-			while(run_ssd > 0)
+			while(run_lpr > 0)
 			{
 				RVAL_OK(lpr_critical_resource(&license_num, bbox_param,
 				ssd_mid_buf, G_param));
@@ -400,6 +405,7 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 					printf("In debug mode, stop after one loop!\n");
 				}
 			}
+			usleep(20000);
 		}
 	} while (0);
 	do {
@@ -496,7 +502,7 @@ static void deinit_ssd(SSD_ctx_t *SSD_ctx)
 static void *run_ssd_pthread(void *ssd_thread_params)
 {
 	int rval = 0;
-	// unsigned long long int frame_number = 0;
+	unsigned long long int frame_number = 0;
 	uint32_t i = 0;
 	ssd_lpr_thread_params_t *ssd_param =
 		(ssd_lpr_thread_params_t*)ssd_thread_params;
@@ -541,11 +547,12 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 			img_tensor = data.tensor_group[G_param->ssd_pyd_idx];
 			dsp_pts = data.dsp_pts;
 			// SAVE_TENSOR_IN_DEBUG_MODE("SSD_pyd.jpg", img_tensor, debug_en);
-			// if(frame_number % 40 == 0)
-			// {
-			// 	SAVE_TENSOR_GROUP_IN_DEBUG_MODE("image", frame_number, img_tensor, 3);
-			// }
-			// frame_number++;
+			if(frame_number % 80 == 0)
+			{
+				has_lpr = 0;
+				// SAVE_TENSOR_GROUP_IN_DEBUG_MODE("image", frame_number, img_tensor, 3);
+			}
+			frame_number++;
 
 			start_time = gettimeus();
 
@@ -588,6 +595,8 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 				bbox_list.bbox[i].norm_min_y = scaled_license_plate.norm_min_y;
 				bbox_list.bbox[i].norm_max_x = scaled_license_plate.norm_max_x;
 				bbox_list.bbox[i].norm_max_y = scaled_license_plate.norm_max_y;
+
+				has_lpr = 1;
 			}
 			RVAL_OK(set_overlay_bbox(&bbox_list));
 			RVAL_OK(show_overlay(dsp_pts));
@@ -678,6 +687,23 @@ static int read_bin(const std::string &file_path, TOFAcquisition::PointCloud &re
 	return 0;
 }
 
+static int filter_point_cloud( const cv::Mat &depth_map, TOFAcquisition::PointCloud &src_cloud)
+{
+	const uchar* data = depth_map.ptr<uchar>(0);
+	for (auto it = src_cloud.begin(); it != src_cloud.end();)
+    {
+		int index = it->index;
+		if(*(data + index) == 0)
+		{
+			it = src_cloud.erase(it);
+		}
+        else
+		{
+            ++it;
+        }
+    }
+}
+
 static int compute_point_count(const TOFAcquisition::PointCloud &bg_cloud, TOFAcquisition::PointCloud &src_cloud)
 {
 	int result = 0;
@@ -702,19 +728,67 @@ static int compute_point_count(const TOFAcquisition::PointCloud &bg_cloud, TOFAc
 	return result;
 }
 
-static void vote_in_out(const std::vector<int> &point_cout_list)
+static int compute_depth_map(const cv::Mat &bg_map, const cv::Mat &depth_map)
 {
+	int result = 0;
+	int diff = 0;
+	for (int i = 0; i < depth_map.rows; i++)
+    {
+        const uchar* bg_data = bg_map.ptr<uchar>(i);
+        const uchar* data = depth_map.ptr<uchar>(i);
+        for (int j=0; j<depth_map.cols; j++)
+        {
+			diff = abs(bg_data[j] - data[j]);
+			if(diff > 20)
+			{
+				result++;
+			}
+        }
+    }
+	return result;
+}
+
+static int vote_in_out(const std::vector<int> &point_cout_list)
+{
+	int result = -1;
 	int in_count = 0;
 	int out_count = 0;
 	int diff_count = 0;
 	for(size_t i = 1; i < point_cout_list.size(); i++)
 	{
 		diff_count = point_cout_list[i] - point_cout_list[i-1];
-		if(diff_count > 10)
+		if(diff_count >= 10)
 		{
 			in_count++;
 		}
-		else if(diff_count < -10)
+		else if(diff_count <= -10)
+		{
+			out_count++;
+		}
+	}
+
+	if(in_count > out_count)
+	{
+		result = 0;
+	}
+	else if(in_count < out_count)
+	{
+		result = 1;
+	}
+	return result;
+}
+
+static void get_final_lpr(const std::vector<int> &result_list)
+{
+	int in_count = 0;
+	int out_count = 0;
+	for(size_t i = 1; i < result_list.size(); i++)
+	{
+		if(result_list[i] == 0)
+		{
+			in_count++;
+		}
+		else if(result_list[i] == 1)
 		{
 			out_count++;
 		}
@@ -761,7 +835,7 @@ static void offline_point_cloud_process()
 			read_bin(temp_str.str(), src_cloud);
 			if(src_cloud.size() > 10)
 			{
-				run_ssd = 1;
+				run_lpr = 1;
 				if(frame_number % 10 == 0)
 				{
 					vote_in_out(point_cout_list);
@@ -779,39 +853,55 @@ static void offline_point_cloud_process()
 static void point_cloud_process()
 {
 	int point_count = 0;
-	unsigned long long int frame_number = 0;
+	int is_in = -1;
+	unsigned long long int process_number = 0;
+	unsigned long long int no_process_number = 0;
+	cv::Mat filter_map;
+	cv::Mat bg_map = cv::Mat::zeros(cv::Size(DEPTH_WIDTH, DEPTH_HEIGTH),CV_8UC1);
+	cv::Mat depth_map = cv::Mat::zeros(cv::Size(DEPTH_WIDTH, DEPTH_HEIGTH),CV_8UC1);
+	std::vector<int> result_list;
 	std::vector<int> point_cout_list;
 	TOFAcquisition::PointCloud src_cloud;
-	TOFAcquisition::PointCloud bg_cloud;
+	// TOFAcquisition::PointCloud bg_cloud;
+	// read_bin(bg_point_cloud_file, bg_cloud);
 	point_cout_list.clear();
-	read_bin(bg_point_cloud_file, bg_cloud);
 	while(run_flag > 0)
 	{
-		tof_geter.get_tof_data(src_cloud);
-		frame_number++;
-		if(src_cloud.size() > 10)
+		tof_geter.get_tof_data(src_cloud, depth_map);
+		cv::medianBlur(depth_map, filter_map, 5);
+		point_count = compute_depth_map(bg_map, filter_map);
+		if(point_count >= 10 && has_lpr > 0)
 		{
-			run_ssd = 1;
-			// if(frame_number % 20 == 0)
-			// {
-			// 	vote_in_out(point_cout_list);
-			// 	point_cout_list.clear();
-			// }
-			// point_count = compute_point_count(bg_cloud, src_cloud);
-			// point_cout_list.push_back(point_count);
-
-			// if(frame_number % 10 == 0)
-			// {
-			// 	std::stringstream filename;
-			// 	filename << "point_cloud" << frame_number << ".bin";
-			// 	dump_bin(filename.str(), src_cloud);
-			// }
+			run_lpr = 1;
+			no_process_number = 0;
+			process_number++;
+			point_cout_list.push_back(point_count);
+			if(process_number % 10 == 0)
+			{
+				is_in = vote_in_out(point_cout_list);
+				result_list.push_back(is_in);
+				point_cout_list.clear();
+			}
+			
+			if(process_number % 10 == 0)
+			{
+				std::stringstream filename;
+				filename << "point_cloud" << process_number << ".png";
+				cv::imwrite(filename.str(), filter_map);
+				// dump_bin(filename.str(), src_cloud);
+			}
+			// std::cout << "Point Cloud:" << frame_number << std::endl;
 		}
 		else
 		{
-			run_ssd = 0;
+			no_process_number++;
+			if(no_process_number % 60 == 0)
+			{
+				get_final_lpr(result_list);
+				result_list.clear();
+			}
+			run_lpr = 0;
 		}
-		std::cout << "Point Cloud:" << frame_number << std::endl;
 	}
 	std::cout << "stop point cloud process" << std::endl;
 }
@@ -830,6 +920,7 @@ static int start_all_lpr(global_control_param_t *G_param)
 	std::cout << "start_ssd_lpr" << std::endl;
 	do {
 		pthread_mutex_init(&result_mutex, NULL);
+		pthread_mutex_init(&ssd_mutex, NULL);
 		memset(&lpr_thread_params, 0 , sizeof(lpr_thread_params));
 		memset(&data, 0, sizeof(data));
 		RVAL_OK(ea_img_resource_hold_data(G_param->img_resource, &data));
@@ -859,8 +950,8 @@ static int start_all_lpr(global_control_param_t *G_param)
 		run_flag = 0;
 	}
 	std::cout << "start tof success" << std::endl;
-	//point_cloud_process();
-	offline_point_cloud_process();
+	point_cloud_process();
+	//offline_point_cloud_process();
 
 	if (lpr_pthread_id > 0) {
 		pthread_join(lpr_pthread_id, NULL);

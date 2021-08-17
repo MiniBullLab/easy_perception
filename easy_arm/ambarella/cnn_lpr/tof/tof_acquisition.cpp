@@ -1276,6 +1276,7 @@ static int put_buffer(reso *win, tof_mem_ptr *tof_ptr)
 {
 	float *Xvalue = NULL, *Yvalue = NULL, *Zvalue = NULL;
 	int nImgsize = win->width * win->height;
+	
 	Xvalue = tof_ptr->targetData->getXvalue_ptr();
 	Yvalue = tof_ptr->targetData->getYvalue_ptr();
 	Zvalue = tof_ptr->targetData->getZvalue_ptr();
@@ -1436,16 +1437,17 @@ int TOFAcquisition::stop()
 	return ret;
 }
 
-void TOFAcquisition::get_tof_data(PointCloud &point_cloud)
+void TOFAcquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map)
 {
 	int i, j, index;
 	float max_dst = 0;
+	uchar* depth_ptr = depth_map.ptr<uchar>(0);
 	if (sensor_type == SENSOR_IMX316) {
 		max_dst = MAX_DIST_316;
 	} else {
 		max_dst = MAX_DIST_456;
 	}
-	depth_map.clear();
+	max_dst = 3.0f;
 	point_cloud.clear(); 
     pthread_mutex_lock(&tof_buffer.lock);  
     if (tof_buffer.writepos == tof_buffer.readpos)  
@@ -1454,23 +1456,27 @@ void TOFAcquisition::get_tof_data(PointCloud &point_cloud)
     }
 	for(int i = 0; i < MAX_POINT_CLOUD; i++)
 	{
-		if(tof_buffer.buffer_z[tof_buffer.readpos][i] > 0.5f && \
+		if(tof_buffer.buffer_z[tof_buffer.readpos][i] >= 0.5f && \
 			tof_buffer.buffer_z[tof_buffer.readpos][i] <= 3.0f)
 			{
 				struct Point temp_point;
 				temp_point.x = tof_buffer.buffer_x[tof_buffer.readpos][i];
 				temp_point.y = tof_buffer.buffer_y[tof_buffer.readpos][i];
 				temp_point.z = tof_buffer.buffer_z[tof_buffer.readpos][i];
+				temp_point.index = i;
 				point_cloud.push_back(temp_point);
 			}
 		if (tof_buffer.buffer_z[tof_buffer.readpos][i] > max_dst || \
-				(tof_buffer.buffer_z[tof_buffer.readpos][i] == 0)) {
-				depth_map.push_back(0);
-			} 
-			else 
-			{
-				depth_map.push_back((unsigned char)(tof_buffer.buffer_z[tof_buffer.readpos][i] * 255 / max_dst));
-			}
+				tof_buffer.buffer_z[tof_buffer.readpos][i] < 0.5f || \
+				(tof_buffer.buffer_z[tof_buffer.readpos][i] == 0))
+				 {
+					*depth_ptr = 0;
+				 } 
+				 else 
+				 {
+					*depth_ptr = static_cast<uchar>(tof_buffer.buffer_z[tof_buffer.readpos][i] * 255 / max_dst);
+				 }
+		depth_ptr++;
 	} 
     tof_buffer.readpos++;  
     if (tof_buffer.readpos >= BUFFER_SIZE)  
