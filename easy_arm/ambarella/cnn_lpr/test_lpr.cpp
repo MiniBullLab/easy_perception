@@ -541,75 +541,78 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
 
 		while (run_flag) {
-			RVAL_OK(ea_img_resource_hold_data(G_param->img_resource, &data));
-			RVAL_ASSERT(data.tensor_group != NULL);
-			RVAL_ASSERT(data.tensor_num >= 1);
-			img_tensor = data.tensor_group[G_param->ssd_pyd_idx];
-			dsp_pts = data.dsp_pts;
-			// SAVE_TENSOR_IN_DEBUG_MODE("SSD_pyd.jpg", img_tensor, debug_en);
-			if(frame_number % 80 == 0)
-			{
-				has_lpr = 0;
-				// SAVE_TENSOR_GROUP_IN_DEBUG_MODE("image", frame_number, img_tensor, 3);
+			while(run_lpr > 0){
+				RVAL_OK(ea_img_resource_hold_data(G_param->img_resource, &data));
+				RVAL_ASSERT(data.tensor_group != NULL);
+				RVAL_ASSERT(data.tensor_num >= 1);
+				img_tensor = data.tensor_group[G_param->ssd_pyd_idx];
+				dsp_pts = data.dsp_pts;
+				// SAVE_TENSOR_IN_DEBUG_MODE("SSD_pyd.jpg", img_tensor, debug_en);
+				if(frame_number % 80 == 0)
+				{
+					has_lpr = 0;
+					// SAVE_TENSOR_GROUP_IN_DEBUG_MODE("image", frame_number, img_tensor, 3);
+				}
+				frame_number++;
+
+				start_time = gettimeus();
+
+				TIME_MEASURE_START(debug_en);
+				RVAL_OK(ea_cvt_color_resize(img_tensor, SSD_ctx.net_input.tensor,
+					EA_COLOR_YUV2BGR_NV12, EA_VP));
+				TIME_MEASURE_END("[SSD] preprocess time", debug_en);
+
+				TIME_MEASURE_START(debug_en);
+				RVAL_OK(ssd_net_run_vp_forward(&SSD_ctx.ssd_net_ctx));
+				ea_tensor_sync_cache(SSD_ctx.ssd_net_ctx.output_loc_tensor, EA_VP, EA_CPU);
+				ea_tensor_sync_cache(SSD_ctx.ssd_net_ctx.output_conf_tensor, EA_VP, EA_CPU);
+				TIME_MEASURE_END("[SSD] network time", debug_en);
+
+				TIME_MEASURE_START(debug_en);
+				ssd_net_result.ssd_det_num = 0;
+				memset(&ssd_net_result.labels[0][0], 0,
+					SSD_NET_MAX_LABEL_NUM * SSD_NET_MAX_LABEL_LEN);
+				memset(ssd_net_result.dproc_ssd_result, 0,
+					SSD_ctx.vp_result_info.max_dproc_ssd_result_num *
+					sizeof(dproc_ssd_detection_output_result_t));
+				RVAL_OK(ssd_net_run_arm_nms(&SSD_ctx.ssd_net_ctx,
+					SSD_ctx.vp_result_info.loc_dram_addr,
+					SSD_ctx.vp_result_info.conf_dram_addr, &ssd_net_result));
+				TIME_MEASURE_END("[SSD] ARM NMS time", debug_en);
+
+				TIME_MEASURE_START(debug_en);
+				ssd_result_num = min(ssd_net_result.ssd_det_num, MAX_DETECTED_LICENSE_NUM);
+				bbox_list.bbox_num = min(ssd_result_num, MAX_OVERLAY_PLATE_NUM);
+				ssd_critical_resource(ssd_net_result.dproc_ssd_result, &data,
+					bbox_list.bbox_num, ssd_mid_buf, G_param);
+
+				for (i = 0; i < bbox_list.bbox_num; ++i) {
+					upscale_normalized_rectangle(ssd_net_result.dproc_ssd_result[i].bbox.x_min,
+					ssd_net_result.dproc_ssd_result[i].bbox.y_min,
+					ssd_net_result.dproc_ssd_result[i].bbox.x_max,
+					ssd_net_result.dproc_ssd_result[i].bbox.y_max,
+					DRAW_LICNESE_UPSCALE_W, DRAW_LICNESE_UPSCALE_H, &scaled_license_plate);
+					bbox_list.bbox[i].norm_min_x = scaled_license_plate.norm_min_x;
+					bbox_list.bbox[i].norm_min_y = scaled_license_plate.norm_min_y;
+					bbox_list.bbox[i].norm_max_x = scaled_license_plate.norm_max_x;
+					bbox_list.bbox[i].norm_max_y = scaled_license_plate.norm_max_y;
+
+					has_lpr = 1;
+				}
+				RVAL_OK(set_overlay_bbox(&bbox_list));
+				RVAL_OK(show_overlay(dsp_pts));
+				TIME_MEASURE_END("[SSD] post-process time", debug_en);
+
+				sum_time += (gettimeus() - start_time);
+				++loop_count;
+				if (loop_count == TIME_MEASURE_LOOPS) {
+					printf("SSD average time [per %d loops]: %f ms\n",
+						TIME_MEASURE_LOOPS, sum_time / (1000 * TIME_MEASURE_LOOPS));
+					sum_time = 0;
+					loop_count = 1;
+				}
 			}
-			frame_number++;
-
-			start_time = gettimeus();
-
-			TIME_MEASURE_START(debug_en);
-			RVAL_OK(ea_cvt_color_resize(img_tensor, SSD_ctx.net_input.tensor,
-				EA_COLOR_YUV2BGR_NV12, EA_VP));
-			TIME_MEASURE_END("[SSD] preprocess time", debug_en);
-
-			TIME_MEASURE_START(debug_en);
-			RVAL_OK(ssd_net_run_vp_forward(&SSD_ctx.ssd_net_ctx));
-			ea_tensor_sync_cache(SSD_ctx.ssd_net_ctx.output_loc_tensor, EA_VP, EA_CPU);
-			ea_tensor_sync_cache(SSD_ctx.ssd_net_ctx.output_conf_tensor, EA_VP, EA_CPU);
-			TIME_MEASURE_END("[SSD] network time", debug_en);
-
-			TIME_MEASURE_START(debug_en);
-			ssd_net_result.ssd_det_num = 0;
-			memset(&ssd_net_result.labels[0][0], 0,
-				SSD_NET_MAX_LABEL_NUM * SSD_NET_MAX_LABEL_LEN);
-			memset(ssd_net_result.dproc_ssd_result, 0,
-				SSD_ctx.vp_result_info.max_dproc_ssd_result_num *
-				sizeof(dproc_ssd_detection_output_result_t));
-			RVAL_OK(ssd_net_run_arm_nms(&SSD_ctx.ssd_net_ctx,
-				SSD_ctx.vp_result_info.loc_dram_addr,
-				SSD_ctx.vp_result_info.conf_dram_addr, &ssd_net_result));
-			TIME_MEASURE_END("[SSD] ARM NMS time", debug_en);
-
-			TIME_MEASURE_START(debug_en);
-			ssd_result_num = min(ssd_net_result.ssd_det_num, MAX_DETECTED_LICENSE_NUM);
-			bbox_list.bbox_num = min(ssd_result_num, MAX_OVERLAY_PLATE_NUM);
-			ssd_critical_resource(ssd_net_result.dproc_ssd_result, &data,
-				bbox_list.bbox_num, ssd_mid_buf, G_param);
-
-			for (i = 0; i < bbox_list.bbox_num; ++i) {
-				upscale_normalized_rectangle(ssd_net_result.dproc_ssd_result[i].bbox.x_min,
-				ssd_net_result.dproc_ssd_result[i].bbox.y_min,
-				ssd_net_result.dproc_ssd_result[i].bbox.x_max,
-				ssd_net_result.dproc_ssd_result[i].bbox.y_max,
-				DRAW_LICNESE_UPSCALE_W, DRAW_LICNESE_UPSCALE_H, &scaled_license_plate);
-				bbox_list.bbox[i].norm_min_x = scaled_license_plate.norm_min_x;
-				bbox_list.bbox[i].norm_min_y = scaled_license_plate.norm_min_y;
-				bbox_list.bbox[i].norm_max_x = scaled_license_plate.norm_max_x;
-				bbox_list.bbox[i].norm_max_y = scaled_license_plate.norm_max_y;
-
-				has_lpr = 1;
-			}
-			RVAL_OK(set_overlay_bbox(&bbox_list));
-			RVAL_OK(show_overlay(dsp_pts));
-			TIME_MEASURE_END("[SSD] post-process time", debug_en);
-
-			sum_time += (gettimeus() - start_time);
-			++loop_count;
-			if (loop_count == TIME_MEASURE_LOOPS) {
-				printf("SSD average time [per %d loops]: %f ms\n",
-					TIME_MEASURE_LOOPS, sum_time / (1000 * TIME_MEASURE_LOOPS));
-				sum_time = 0;
-				loop_count = 1;
-			}
+			usleep(20000);
 		}
 	} while (0);
 	do {
@@ -870,37 +873,38 @@ static void point_cloud_process()
 		tof_geter.get_tof_data(src_cloud, depth_map);
 		cv::medianBlur(depth_map, filter_map, 5);
 		point_count = compute_depth_map(bg_map, filter_map);
-		if(point_count >= 10 && has_lpr > 0)
+		if(point_count >= 5)
 		{
 			run_lpr = 1;
-			no_process_number = 0;
-			process_number++;
-			point_cout_list.push_back(point_count);
-			if(process_number % 10 == 0)
+			if(has_lpr == 1)
 			{
-				is_in = vote_in_out(point_cout_list);
-				result_list.push_back(is_in);
-				point_cout_list.clear();
+				no_process_number = 0;
+				process_number++;
+				point_cout_list.push_back(point_count);
+				if(process_number % 10 == 0)
+				{
+					is_in = vote_in_out(point_cout_list);
+					result_list.push_back(is_in);
+					point_cout_list.clear();
+				}
+				// if(process_number % 10 == 0)
+				// {
+				// 	std::stringstream filename;
+				// 	filename << "point_cloud" << process_number << ".png";
+				// 	cv::imwrite(filename.str(), filter_map);
+				// 	// dump_bin(filename.str(), src_cloud);
+				// }
 			}
-			
-			if(process_number % 10 == 0)
-			{
-				std::stringstream filename;
-				filename << "point_cloud" << process_number << ".png";
-				cv::imwrite(filename.str(), filter_map);
-				// dump_bin(filename.str(), src_cloud);
-			}
-			// std::cout << "Point Cloud:" << frame_number << std::endl;
 		}
-		else
+		if(point_count < 5 || has_lpr == 0)
 		{
 			no_process_number++;
 			if(no_process_number % 60 == 0)
 			{
 				get_final_lpr(result_list);
 				result_list.clear();
+				run_lpr = 0;
 			}
-			run_lpr = 0;
 		}
 	}
 	std::cout << "stop point cloud process" << std::endl;
