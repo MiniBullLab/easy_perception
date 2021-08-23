@@ -249,6 +249,7 @@ static int fd_spi = -1;
 static const char *device = "/dev/spidev1.0";
 
 volatile int run_tof = 0;
+volatile int has_sleep = 1;
 
 struct TOFBuffer tof_buffer;  
 
@@ -1356,6 +1357,10 @@ static void *run_tof_pthread(void* data)
 			clock_gettime(CLOCK_REALTIME, &time3);
 			debug_time(&time0, &time1, &time2, &time3);
 		}
+		if(has_sleep > 0)
+		{
+			sleep(1);
+		}
 	}
 	do {
 		run_tof = 0;
@@ -1435,6 +1440,16 @@ int TOFAcquisition::stop()
 	}
 	std::cout << "stop TOF success" << std::endl;
 	return ret;
+}
+
+void TOFAcquisition::set_up()
+{
+	has_sleep = 0;
+}
+
+void TOFAcquisition::set_sleep()
+{
+	has_sleep = 1;
 }
 
 void TOFAcquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map)

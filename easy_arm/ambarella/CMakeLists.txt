@@ -27,4 +27,4 @@ add_subdirectory(cnn_runtime)
 add_subdirectory(cnn_runtime/tests)
 
 #build cnn_lpr
-#add_subdirectory(cnn_lpr)
+# add_subdirectory(cnn_lpr)

@@ -27,6 +27,9 @@ public:
     int start();
     int stop();
 
+    void set_up();
+    void set_sleep();
+
     void get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map);
 
 private:

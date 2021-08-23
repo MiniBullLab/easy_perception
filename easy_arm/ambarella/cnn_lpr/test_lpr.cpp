@@ -103,7 +103,7 @@ const static std::string lphm_model_path = "./lpr/LPHM_cavalry.bin";
 const static std::vector<std::string> lphm_input_name = {"data"};
 const static std::vector<std::string> lphm_output_name = {"dense"};
 
-const static std::string bg_point_cloud_file = "./bg.bin";
+const static std::string bg_point_cloud_file = "./bg.png";
 
 static std::string lpr_result = "";
 
@@ -667,6 +667,12 @@ static int dump_bin(const std::string &save_path, const TOFAcquisition::PointClo
 	return 0;
 }
 
+static bool is_file_exists(const std::string& name) 
+{
+    std::ifstream f(name.c_str());
+    return f.good();
+}
+
 static int read_bin(const std::string &file_path, TOFAcquisition::PointCloud &result_cloud)
 {
 	float data[3] = {0};
@@ -865,8 +871,16 @@ static void point_cloud_process()
 	std::vector<int> result_list;
 	std::vector<int> point_cout_list;
 	TOFAcquisition::PointCloud src_cloud;
-	// TOFAcquisition::PointCloud bg_cloud;
-	// read_bin(bg_point_cloud_file, bg_cloud);
+	if(!is_file_exists(bg_point_cloud_file))
+	{
+		tof_geter.get_tof_data(src_cloud, bg_map);
+		cv::imwrite(bg_point_cloud_file, bg_map);
+	}
+	else
+	{
+		bg_map = cv::imread(bg_point_cloud_file.c_str());
+	}
+	
 	point_cout_list.clear();
 	while(run_flag > 0)
 	{
@@ -875,6 +889,7 @@ static void point_cloud_process()
 		point_count = compute_depth_map(bg_map, filter_map);
 		if(point_count >= 5)
 		{
+			tof_geter.set_up();
 			run_lpr = 1;
 			if(has_lpr == 1)
 			{
@@ -896,7 +911,7 @@ static void point_cloud_process()
 				// }
 			}
 		}
-		if(point_count < 5 || has_lpr == 0)
+		if(point_count < 5 || has_lpr == 0 || is_in == -1)
 		{
 			no_process_number++;
 			if(no_process_number % 60 == 0)
@@ -904,6 +919,7 @@ static void point_cloud_process()
 				get_final_lpr(result_list);
 				result_list.clear();
 				run_lpr = 0;
+				tof_geter.set_sleep();
 			}
 		}
 	}
@@ -970,6 +986,7 @@ static int start_all_lpr(global_control_param_t *G_param)
 
 static void sigstop(int signal_number)
 {
+	run_lpr = 0;
 	run_flag = 0;
 	tof_geter.stop();
 	printf("sigstop msg, exit live mode\n");
@@ -978,7 +995,7 @@ static void sigstop(int signal_number)
 
 static int env_init(global_control_param_t *G_param)
 {
-	int rval = 0;;
+	int rval = 0;
 	std::cout << "env_init" << std::endl;
 	do {
 		RVAL_OK(ea_env_open(EA_ENV_ENABLE_IAV
