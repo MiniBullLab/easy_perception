@@ -9,7 +9,6 @@
 #include <fstream>
 
 #define KNEIGHBOURS (9)
-#define FEATURCHANNEL (1536)
 
 void reshape_embedding(const float *output, \
                        cv::Mat embedding_test, \
@@ -59,9 +58,9 @@ int OneClassNet::init(const std::string &modelPath, const std::string &inputName
                     inputName.c_str(), outputName.c_str());
     rval = cnn_init(&nnctrl_ctx, &cavalry_ctx);
     this->threshold = threshold;
-    this->inputSize = get_input_size(&nnctrl_ctx);
-    this->inputChannel = get_input_channel(&nnctrl_ctx);
-    this->oneClassOutput = new float[this->inputSize.height * this->inputSize.width * this->inputChannel];
+    this->outputSize = get_output_size(&nnctrl_ctx);
+    this->outputChannel = get_output_channel(&nnctrl_ctx);
+    this->oneClassOutput = new float[this->outputSize.height * this->outputSize.width * this->outputChannel];
 
     return rval;
 }
@@ -89,16 +88,6 @@ int OneClassNet::run(const cv::Mat &srcImage, const std::string &embedding_file)
         }
     }
 
-    for (int a = 0; a < 20; a++)
-    {
-        std::cout << oneClassOutput[a] << " ";
-    }
-    std::cout << "\n";
-
-    // std::ofstream ouF;
-    // ouF.open("./score.bin", std::ofstream::binary);
-    // ouF.write(reinterpret_cast<const char*>(classnetOutput), sizeof(float) * CLASS_NUM);
-    // ouF.close();
     result = postprocess(oneClassOutput, embedding_file, output_c, output_h, output_w);
     std::cout << "result: " << result << std::endl;
     return result;
@@ -110,81 +99,68 @@ float OneClassNet::postprocess(const float *output,
                         const int out_height, \
                         const int out_width)
 {
-    // std::ifstream embedding(embedding_file, std::ios::binary|std::ios::in);
-    // embedding.seekg(0,std::ios::end);
-    // int embedding_length = embedding.tellg() / sizeof(float);
-    // embedding.seekg(0, std::ios::beg);
-    // float* embedding_coreset = new float[embedding_length];
-    // embedding.read(reinterpret_cast<char*>(embedding_coreset), sizeof(float) * embedding_length);
-    // embedding.close();
+    std::ifstream embedding(embedding_file, std::ios::binary|std::ios::in);
+    embedding.seekg(0,std::ios::end);
+    int embedding_length = embedding.tellg() / sizeof(float);
+    embedding.seekg(0, std::ios::beg);
+    float* embedding_coreset = new float[embedding_length];
+    embedding.read(reinterpret_cast<char*>(embedding_coreset), sizeof(float) * embedding_length);
+    embedding.close();
 
-    // cv::Mat embedding_train(embedding_length / FEATURCHANNEL, FEATURCHANNEL, CV_32FC1);
-    // cv::Mat embedding_test(out_height*out_width, out_channel, CV_32FC1);
+    cv::Mat embedding_train(embedding_length / out_channel, out_channel, CV_32FC1);
+    cv::Mat embedding_test(out_height*out_width, out_channel, CV_32FC1);
 
-    // memcpy(embedding_train.data, embedding_coreset, embedding_length * sizeof(float));
-    // reshape_embedding(output, embedding_test, out_channel, out_height, out_width);
+    memcpy(embedding_train.data, embedding_coreset, embedding_length * sizeof(float));
+    reshape_embedding(output, embedding_test, out_channel, out_height, out_width);
 
-    // for (int a = 0; a < 20; a++)
-    // {
-    //     std::cout << ((float*)embedding_train.data)[a] << " ";
-    // }
-    // std::cout << "\n";
-    // for (int b = 0; b < 20; b++)
-    // {
-    //     std::cout << ((float*)embedding_test.data)[b] << " ";
-    // }
-    // std::cout << "\n";
+    //----------------------------knn---------------------------
+    const int K(KNEIGHBOURS);
+    cv::Ptr<cv::ml::KNearest> knn = cv::ml::KNearest::create();
+    knn->setDefaultK(K);
+    knn->setAlgorithmType(cv::ml::KNearest::BRUTE_FORCE);
+    cv::Mat labels(embedding_train.rows, 1, CV_32FC1, cv::Scalar(0.0));
 
-    // //----------------------------knn---------------------------
-    // const int K(KNEIGHBOURS);
-    // cv::Ptr<cv::ml::KNearest> knn = cv::ml::KNearest::create();
-    // knn->setDefaultK(K);
-    // knn->setAlgorithmType(cv::ml::KNearest::BRUTE_FORCE);
-    // cv::Mat labels(embedding_train.rows, 1, CV_32FC1, cv::Scalar(0.0));
+    knn->train(embedding_train, cv::ml::ROW_SAMPLE, labels);
 
-    // knn->train(embedding_train, cv::ml::ROW_SAMPLE, labels);
+    cv::Mat result, neighborResponses, distances_mat;
+    knn->findNearest(embedding_test, K, result, neighborResponses, distances_mat);
 
-    // cv::Mat result, neighborResponses, distances_mat;
-    // knn->findNearest(embedding_test, K, result, neighborResponses, distances_mat);
+    int distanceMatWidth = distances_mat.size[0];
+    int distanceMatHeight = distances_mat.size[1];
+    // std::cout << "result: " << distances_mat.size[0] << " " << distances_mat.size[1] << std::endl;
 
-    // int distanceMatWidth = distances_mat.size[0];
-    // int distanceMatHeight = distances_mat.size[1];
-    // // std::cout << "result: " << distances_mat.size[0] << " " << distances_mat.size[1] << std::endl;
+    // reshape distances from 784 * 9 --> 9 * 784
+    float* distances = new float[distanceMatWidth*distanceMatHeight];
+    for (int d = 0; d < distanceMatHeight; d++)
+    {
+        for (int c = 0; c < distanceMatWidth; c++)
+        {
+            distances[d*distanceMatWidth + c] = ((float*)distances_mat.data)[c*distanceMatHeight + d];
+            // memcpy(distances + d*784 + c, distances_mat.data + c*9 + d, sizeof(float));
+        }
+    }
 
-    // // reshape distances from 784 * 9 --> 9 * 784
-    // float* distances = new float[distanceMatWidth*distanceMatHeight];
-    // for (int d = 0; d < distanceMatHeight; d++)
-    // {
-    //     for (int c = 0; c < distanceMatWidth; c++)
-    //     {
-    //         distances[d*distanceMatWidth + c] = ((float*)distances_mat.data)[c*distanceMatHeight + d];
-    //         // memcpy(distances + d*784 + c, distances_mat.data + c*9 + d, sizeof(float));
-    //     }
-    // }
+    int max_posit = std::max_element(distances, \
+				                distances + distanceMatWidth) - distances; // - distances.data;
 
-    // int max_posit = std::max_element(distances, \
-	// 			                distances + distanceMatWidth) - distances; // - distances.data;
+    // std::cout << "max_posit: " << max_posit << std::endl;
 
-    // // std::cout << "max_posit: " << max_posit << std::endl;
+    float* N_b = new float[distanceMatHeight];
+    for(int i = 0; i < distanceMatHeight; i++)
+    {
+        N_b[i] = distances[i * distanceMatWidth + max_posit];
+    }
 
-    // float* N_b = new float[distanceMatHeight];
-    // for(int i = 0; i < distanceMatHeight; i++)
-    // {
-    //     N_b[i] = distances[i * distanceMatWidth + max_posit];
-    // }
+    float w, sum_N_b = 0;
+    for(int j = 0; j < distanceMatHeight; j++)
+    {
+        sum_N_b += exp(N_b[j]);
+    }
+    float max_N_b = *std::max_element(N_b, N_b + distanceMatHeight);
+    w = (1 - exp(max_N_b) / sum_N_b);
 
-    // float w, sum_N_b = 0;
-    // for(int j = 0; j < distanceMatHeight; j++)
-    // {
-    //     sum_N_b += exp(N_b[j]);
-    // }
-    // float max_N_b = *std::max_element(N_b, N_b + distanceMatHeight);
-    // w = (1 - exp(max_N_b) / sum_N_b);
-
-    // float score;
-    // score = w * distances[max_posit];
-    float score = 0.0;
-    std::cout << "score: " << score << std::endl;
+    float score;
+    score = w * distances[max_posit];
 
     return score;
 }

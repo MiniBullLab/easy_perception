@@ -25,6 +25,6 @@ private:
     nnctrl_ctx_t nnctrl_ctx;
     float threshold;
     float *oneClassOutput;
-    cv::Size inputSize;
-    int inputChannel;
+    cv::Size outputSize;
+    int outputChannel;
 };
