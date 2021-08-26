@@ -85,3 +85,18 @@ target_link_libraries(posenet_test
                       cvlib
                       PhaseData_20190919_v1.4f
                       IOdevice)
+
+add_executable(one_class_test one_class_test.cpp ${UTILITY_SRCS})
+target_link_libraries(one_class_test
+                      cnn_runtime
+                      opencv_core
+                      opencv_imgcodecs
+                      opencv_imgproc
+                      opencv_highgui 
+                      opencv_ml
+                      jpeg
+                      png
+                      z
+                      nnctrl
+                      vproc
+                      cavalry_mem)

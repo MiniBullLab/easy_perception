@@ -16,6 +16,7 @@ void resize_with_specific_height(const cv::Mat &src, const cv::Size dst_size, cv
 
 cv::Size get_input_size(nnctrl_ctx_t *nnctrl_ctx);
 
+int get_input_channel(nnctrl_ctx_t *nnctrl_ctx);
 int get_input_pitch(nnctrl_ctx_t *nnctrl_ctx);
 int get_output_pitch(nnctrl_ctx_t *nnctrl_ctx);
 

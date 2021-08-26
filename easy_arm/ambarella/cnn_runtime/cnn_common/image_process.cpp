@@ -67,6 +67,12 @@ cv::Size get_input_size(nnctrl_ctx_t *nnctrl_ctx)
     return dst_size;
 }
 
+int get_input_channel(nnctrl_ctx_t *nnctrl_ctx)
+{
+    int channel = nnctrl_ctx->net.net_in.in_desc[0].dim.depth;
+    return channel;
+}
+
 int get_input_pitch(nnctrl_ctx_t *nnctrl_ctx)
 {
     int pitch = nnctrl_ctx->net.net_in.in_desc[0].dim.pitch;
