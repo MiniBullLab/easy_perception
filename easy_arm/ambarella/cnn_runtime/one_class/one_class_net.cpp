@@ -65,7 +65,7 @@ int OneClassNet::init(const std::string &modelPath, const std::string &inputName
     return rval;
 }
 
-int OneClassNet::run(const cv::Mat &srcImage, const std::string &embedding_file)
+float OneClassNet::run(const cv::Mat &srcImage, const std::string &embedding_file)
 {
     float result = 0.0;
     float *tempOutput[1] = {NULL};

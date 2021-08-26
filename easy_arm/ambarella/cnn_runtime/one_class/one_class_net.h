@@ -11,7 +11,7 @@ public:
     ~OneClassNet();
     int init(const std::string &modelPath, const std::string &inputName, 
              const std::string &outputName, const float threshold=0.1f);
-    int run(const cv::Mat &srcImage, const std::string &embedding_file);
+    float run(const cv::Mat &srcImage, const std::string &embedding_file);
 
 private:
     float postprocess(const float *output,
