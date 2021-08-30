@@ -69,7 +69,7 @@
 #define SPI_OFFSET 			(86)
 #define SPI_LEN 			(90)
 
-#define BUFFER_SIZE (5)
+#define BUFFER_SIZE (10)
 #define MAX_POINT_CLOUD (240*180)
 
 #ifndef CHECK_LIMIT
@@ -1472,7 +1472,7 @@ void TOFAcquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map)
 	for(int i = 0; i < MAX_POINT_CLOUD; i++)
 	{
 		if(tof_buffer.buffer_z[tof_buffer.readpos][i] >= 0.5f && \
-			tof_buffer.buffer_z[tof_buffer.readpos][i] <= 3.5f)
+			tof_buffer.buffer_z[tof_buffer.readpos][i] <= max_dst)
 			{
 				struct Point temp_point;
 				temp_point.x = tof_buffer.buffer_x[tof_buffer.readpos][i];
@@ -1498,4 +1498,66 @@ void TOFAcquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map)
         tof_buffer.readpos = 0; 
     pthread_cond_signal(&tof_buffer.notfull);  
     pthread_mutex_unlock(&tof_buffer.lock);
+}
+
+int TOFAcquisition::dump_ply(const char* save_path, const PointCloud &src_cloud)
+{
+	char ply_header[100];
+	sprintf(ply_header, "element vertex %ld\n", src_cloud.size());
+	FILE *fptr;
+	fptr = fopen(save_path, "w");
+
+	fprintf(fptr, "ply\n");
+	fprintf(fptr, "format ascii 1.0\n");
+	fprintf(fptr, "%s", ply_header);
+	fprintf(fptr, "property float x\nproperty float y\nproperty float z\n");
+	fprintf(fptr, "property uchar red\nproperty uchar green\nproperty uchar blue\n");
+	fprintf(fptr, "end_header\n");
+	for (size_t i = 0; i < src_cloud.size(); i++)
+	{
+		fprintf(fptr, "%f %f %f\n", src_cloud[i].x, src_cloud[i].y, src_cloud[i].z);
+		fprintf(fptr, "%d %d %d\n", 255, 0, 0);
+	}
+	fclose(fptr);
+	std::cout << "save ply OK..." << std::endl;
+	return 0;
+}
+
+int TOFAcquisition::dump_bin(const std::string &save_path, const PointCloud &src_cloud)
+{
+	std::ofstream out_file(save_path, std::ios::binary);
+	for (size_t i = 0; i < src_cloud.size(); i++)
+	{
+		float data[3];
+		data[0] = src_cloud[i].x;
+        data[1] = src_cloud[i].y;
+        data[2] = src_cloud[i].z;
+		out_file.write(reinterpret_cast<char*>(data), sizeof(data));
+	}
+	out_file.close();
+	std::cout << "save bin OK..." << std::endl;
+	return 0;
+}
+
+int TOFAcquisition::read_bin(const std::string &file_path, PointCloud &result_cloud)
+{
+	float data[3] = {0};
+	std::ifstream in_file(file_path, std::ios::in|std::ios::binary);
+	if(!in_file)
+    {
+        std::cout << file_path << " open error!" << std::endl;
+        return -1;
+    }
+	result_cloud.clear();
+	while(in_file.read(reinterpret_cast<char*>(data), sizeof(data)))
+	{
+		TOFAcquisition::Point point;
+		point.x = data[0];
+		point.y = data[1];
+		point.z = data[2];
+		result_cloud.push_back(point);
+	}
+	in_file.close();
+	std::cout << "read bin OK..." << std::endl;
+	return 0;
 }

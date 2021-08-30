@@ -30,4 +30,8 @@ test_mempart -m 4 -s 0x04000000
 #test_mempart -m 4 -f
 #test_mempart -m 4 -s 0x04009000
 export LD_LIBRARY_PATH=/data:$LD_LIBRARY_PATH
+
+if [ ! -d "./result_video" ]; then
+    mkdir ./result_video
+fi
 ./test_lpr

@@ -32,6 +32,10 @@ public:
 
     void get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map);
 
+    int dump_ply(const char* save_path, const PointCloud &src_cloud);
+    int dump_bin(const std::string &save_path, const PointCloud &src_cloud);
+    int read_bin(const std::string &file_path, PointCloud &result_cloud);
+
 private:
     pthread_t pthread_id;
 };

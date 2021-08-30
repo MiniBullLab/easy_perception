@@ -42,6 +42,7 @@ link_directories(${AMBARELLA_DIR}/out/cv25m_pinenut/packages/data_process)
 
 #eazyai
 include_directories(${AMBARELLA_DIR}/packages/eazyai/inc)
+include_directories(${AMBARELLA_DIR}/packages/eazyai/src)
 link_directories(${AMBARELLA_DIR}/out/cv25m_pinenut/packages/eazyai)
 
 #data_transfer

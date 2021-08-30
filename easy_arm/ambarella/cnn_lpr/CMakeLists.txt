@@ -27,6 +27,7 @@ target_link_libraries(test_lpr
                       opencv_core
                       opencv_imgcodecs
                       opencv_imgproc
+                      opencv_videoio
                       # opencv_highgui
                       # opencv_dnn
                       # opencv_flann

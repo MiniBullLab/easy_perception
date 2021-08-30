@@ -1,39 +1,3 @@
-/*******************************************************************************
- * test_ssd_lpr.c
- *
- * History:
- *    2020/03/31  - [Junshuai ZHU] created
- *
- * Copyright (c) 2020 Ambarella International LP
- *
- * This file and its contents ( "Software" ) are protected by intellectual
- * property rights including, without limitation, U.S. and/or foreign
- * copyrights. This Software is also the confidential and proprietary
- * information of Ambarella International LP and its licensors. You may not use, reproduce,
- * disclose, distribute, modify, or otherwise prepare derivative works of this
- * Software or any portion thereof except pursuant to a signed license agreement
- * or nondisclosure agreement with Ambarella International LP or its authorized affiliates.
- * In the absence of such an agreement, you agree to promptly notify and return
- * this Software to Ambarella International LP.
- *
- * This file includes sample code and is only for internal testing and evaluation.  If you
- * distribute this sample code (whether in source, object, or binary code form), it will be
- * without any warranty or indemnity protection from Ambarella International LP or its affiliates.
- *
- * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF NON-INFRINGEMENT,
- * MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL AMBARELLA INTERNATIONAL LP OR ITS AFFILIATES BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; COMPUTER FAILURE OR MALFUNCTION; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
-******************************************************************************/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,8 +12,14 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #include <iav_ioctl.h>
 #include <eazyai.h>
+#include <tensor_private.h>
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <vector>
@@ -62,6 +32,8 @@
 #include "cnn_lpr/lpr/lpr.hpp"
 
 #include "cnn_lpr/tof/tof_acquisition.h"
+#include "cnn_lpr/tof/tof_data_process.h"
+#include "cnn_lpr/tof/vibebgs.h"
 
 #include "utility/utils.h"
 
@@ -88,6 +60,8 @@
 #define DEPTH_WIDTH (240)
 #define DEPTH_HEIGTH (180)
 
+#define IMAGE_BUFFER_SIZE (40)
+
 EA_LOG_DECLARE_LOCAL(EA_LOG_LEVEL_NOTICE);
 
 const static std::string ssd_model_path = "./lpr/mobilenetv1_ssd_cavalry.bin";
@@ -105,11 +79,21 @@ const static std::vector<std::string> lphm_output_name = {"dense"};
 
 const static std::string bg_point_cloud_file = "./bg.png";
 
+static float lpr_confidence = 0;
 static std::string lpr_result = "";
 
 volatile int has_lpr = 0;
 static pthread_mutex_t result_mutex;
 static pthread_mutex_t ssd_mutex;
+
+struct ImageBuffer  
+{  	
+	cv::Mat buffer[IMAGE_BUFFER_SIZE];
+    pthread_mutex_t lock; /* 互斥体lock 用于对缓冲区的互斥操作 */  
+    int readpos, writepos; /* 读写指针*/  
+    pthread_cond_t notempty; /* 缓冲区非空的条件变量 */  
+    pthread_cond_t notfull; /* 缓冲区未满的条件变量 */  
+};
 
 typedef struct global_control_param_s {
 	// cmd line param
@@ -167,6 +151,7 @@ volatile int run_flag = 1;
 volatile int run_lpr = 0;
 
 TOFAcquisition tof_geter;
+struct ImageBuffer image_buffer;
 
 static int init_param(global_control_param_t *G_param)
 {
@@ -176,6 +161,7 @@ static int init_param(global_control_param_t *G_param)
 
 	G_param->channel_id = DEFAULT_CHANNEL_ID;
 	G_param->stream_id = DEFAULT_STREAM_ID;
+
 	G_param->ssd_pyd_idx= DEFAULT_SSD_LAYER_ID;
 	G_param->lpr_pyd_idx= DEFAULT_LPR_LAYER_ID;
 	G_param->rgb_type = DEFAULT_RGB_TYPE;
@@ -196,6 +182,46 @@ static int init_param(global_control_param_t *G_param)
 	G_param->verbose = 0;
 
 	std::cout << "init sucess" << std::endl;
+
+	return rval;
+}
+
+static int tensor2mat_yuv2bgr_nv12(ea_tensor_t *tensor, cv::Mat &bgr)
+{
+	int rval = EA_SUCCESS;
+	cv::Mat nv12(ea_tensor_shape(tensor)[2] +
+		(ea_tensor_related(tensor) == NULL ? 0 : ea_tensor_shape(ea_tensor_related(tensor))[2]),
+		ea_tensor_shape(tensor)[3], CV_8UC1);
+	uint8_t *p_src = NULL;
+	uint8_t *p_dst = NULL;
+	size_t h;
+
+	do {
+		RVAL_ASSERT(ea_tensor_shape(tensor)[1] == 1);
+
+		p_src = (uint8_t *)ea_tensor_data_for_read(tensor, EA_CPU);
+		p_dst = nv12.data;
+		for (h = 0; h < ea_tensor_shape(tensor)[2]; h++) {
+			memcpy(p_dst, p_src, ea_tensor_shape(tensor)[3]);
+			p_src += ea_tensor_pitch(tensor);
+			p_dst += ea_tensor_shape(tensor)[3];
+		}
+
+		if (ea_tensor_related(tensor)) {
+			p_src = (uint8_t *)ea_tensor_data_for_read(ea_tensor_related(tensor), EA_CPU);
+			for (h = 0; h < ea_tensor_shape(ea_tensor_related(tensor))[2]; h++) {
+				memcpy(p_dst, p_src, ea_tensor_shape(ea_tensor_related(tensor))[3]);
+				p_src += ea_tensor_pitch(ea_tensor_related(tensor));
+				p_dst += ea_tensor_shape(ea_tensor_related(tensor))[3];
+			}
+		}
+
+		#if CV_VERSION_MAJOR < 4
+			cv::cvtColor(nv12, bgr, CV_YUV2BGR_NV12);
+		#else
+			cv::cvtColor(nv12, bgr, COLOR_YUV2BGR_NV12);
+		#endif
+	} while (0);
 
 	return rval;
 }
@@ -241,13 +267,12 @@ static void draw_overlay_preprocess(draw_plate_list_t *draw_plate_list,
 				sizeof(plates[draw_num].text));
 			plates[draw_num].text[sizeof(plates[draw_num].text) - 1] = '\0';
 			++draw_num;
-//			if (G_param->debug_en >= INFO_LEVEL) {
-			// if (1) {
-			// 	printf("********************************************************\n");
-			// 	printf("\nDrawed license: %s, conf: %f\n\n",
-			// 		license_info[i].text, license_info[i].conf);
-			// 	printf("********************************************************\n");
-			// }
+			if (G_param->debug_en > 0) {
+				printf("********************************************************\n");
+				printf("\nDrawed license: %s, conf: %f\n\n",
+					license_info[i].text, license_info[i].conf);
+				printf("********************************************************\n");
+			}
 		}
 	}
 	draw_plate_list->license_num = draw_num;
@@ -323,6 +348,30 @@ static void deinit_LPR(LPR_ctx_t *LPR_ctx)
 	return;
 }
 
+// static int put_image_buffer(cv::Mat &image_mat)
+// {
+// 	uint64_t start_time = 0;
+// 	int rval = EA_SUCCESS;
+// 	if(image_mat.empty())
+// 	{
+// 		std::cout << "image empty!" << std::endl;
+// 		return -1;
+// 	}
+// 	pthread_mutex_lock(&image_buffer.lock);  
+//     if ((image_buffer.writepos + 1) % IMAGE_BUFFER_SIZE == image_buffer.readpos)  
+//     {  
+//         pthread_cond_wait(&image_buffer.notfull, &image_buffer.lock);  
+//     }
+// 	image_buffer.buffer[image_buffer.writepos] = image_mat.clone();
+//     image_buffer.writepos++;  
+//     if (image_buffer.writepos >= IMAGE_BUFFER_SIZE)  
+//         image_buffer.writepos = 0;  
+//     pthread_cond_signal(&image_buffer.notempty);  
+//     pthread_mutex_unlock(&image_buffer.lock);  
+// 	std::cout << "put image" << std::endl;
+// 	return rval;
+// }
+
 static void *run_lpr_pthread(void *lpr_param_thread)
 {
 	int rval;
@@ -378,9 +427,12 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 				{
 					pthread_mutex_lock(&result_mutex);
 					if (license_result.license_info[0].conf > G_param->recg_threshold && \
-						strlen(license_result.license_info[0].text) == CHINESE_LICENSE_STR_LEN)
+						strlen(license_result.license_info[0].text) == CHINESE_LICENSE_STR_LEN && \
+						license_result.license_info[0].conf > lpr_confidence)
 						{
 							lpr_result = license_result.license_info[0].text;
+							lpr_confidence = license_result.license_info[0].conf;
+							std::cout << "LPR:"  << lpr_result << " " << lpr_confidence << std::endl;
 						}
 					pthread_mutex_unlock(&result_mutex);
 				}
@@ -499,6 +551,24 @@ static void deinit_ssd(SSD_ctx_t *SSD_ctx)
 	EA_LOG_NOTICE("deinit_ssd\n");
 }
 
+static int led_process(const cv::Mat &bgr)
+{
+	cv::Mat gray;
+	cv::cvtColor(bgr, gray, CV_BGR2GRAY);
+	//std::cout << "image size:" << gray.cols << " " << gray.rows << std::endl;
+	cv::Scalar left_mean = cv::mean(gray(cv::Rect(0, 0, 300, 300)));  
+	cv::Scalar right_mean = cv::mean(gray(cv::Rect(gray.cols-1-300, 0, 300, 300)));
+	//std::cout << "left:" << left_mean.val[0] << " right:" << right_mean.val[0] << std::endl;
+	if(left_mean.val[0] < 100 && right_mean.val[0] < 100)
+	{
+		return 1;
+	}
+	else
+	{
+		return 0;
+	} 
+}
+
 static void *run_ssd_pthread(void *ssd_thread_params)
 {
 	int rval = 0;
@@ -527,6 +597,19 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 	uint32_t loop_count = 1;
 	uint32_t debug_en = G_param->debug_en;
 
+	bool first_save = true;
+	cv::VideoWriter output_video;
+	cv::Mat bgr(ssd_param->height * 2 / 3, ssd_param->width, CV_8UC3);
+	struct timeval tv;  
+    char time_str[64];
+
+	int is_night = 0;
+	int led_device = open("/sys/devices/platform/e4000000.n_apb/e4008000.i2c/i2c-0/0-0064/leds/lm36011:torch/brightness", O_RDWR, 0);
+	if (led_device < 0) {
+		printf("open led fail\n");
+        return NULL;
+	}
+
 	do {
 		memset(&ssd_net_result, 0, sizeof(ssd_net_result));
 		memset(&data, 0, sizeof(data));
@@ -550,12 +633,35 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 				// SAVE_TENSOR_IN_DEBUG_MODE("SSD_pyd.jpg", img_tensor, debug_en);
 				if(frame_number % 80 == 0)
 				{
+					// std::stringstream filename;
+					// filename << "image_" << frame_number << ".jpg";
+					// std::cout << "tensor channel:" << ea_tensor_shape(img_tensor)[1] << std::endl;
+					// RVAL_OK(ea_tensor_to_jpeg(img_tensor, EA_TENSOR_COLOR_MODE_YUV_NV12, filename.str().c_str()));
 					has_lpr = 0;
-					// SAVE_TENSOR_GROUP_IN_DEBUG_MODE("image", frame_number, img_tensor, 3);
 				}
 				frame_number++;
 
 				start_time = gettimeus();
+
+				TIME_MEASURE_START(debug_en);
+				RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
+				TIME_MEASURE_END("[SSD] yuv to bgr time", debug_en);
+
+				if(led_device > 0)
+				{
+					TIME_MEASURE_START(debug_en);
+					is_night = led_process(bgr);
+					if(is_night > 0)
+					{
+						// std::cout << "is_night:" << is_night << std::endl;
+						write(led_device, "20", sizeof(char));
+					}
+					else
+					{
+						write(led_device, "0", sizeof(char));
+					}
+					TIME_MEASURE_END("[SSD] led time", debug_en);
+				}
 
 				TIME_MEASURE_START(debug_en);
 				RVAL_OK(ea_cvt_color_resize(img_tensor, SSD_ctx.net_input.tensor,
@@ -599,9 +705,43 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 
 					has_lpr = 1;
 				}
+
 				RVAL_OK(set_overlay_bbox(&bbox_list));
 				RVAL_OK(show_overlay(dsp_pts));
 				TIME_MEASURE_END("[SSD] post-process time", debug_en);
+
+				if(has_lpr > 0 && first_save)
+				{
+					if(output_video.isOpened())
+					{
+						output_video.release();
+					}
+					std::stringstream filename;
+					gettimeofday(&tv, NULL);  
+					strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d_%H:%M:%S", localtime(&tv.tv_sec)); 
+					filename << "./result_video/" << time_str << ".avi";
+					if(output_video.open(filename.str(), cv::VideoWriter::fourcc('X','V','I','D'), 25, \
+						cv::Size(bgr.cols, bgr.rows)))
+					{
+						std::cout << "open video save fail!" << std::endl;
+						first_save = false;
+					}
+				}
+				else if(has_lpr > 0)
+				{
+					if (output_video.isOpened())
+					{
+						output_video.write(bgr);
+					}
+				}
+				else
+				{
+					if(output_video.isOpened())
+					{
+						output_video.release();
+						first_save = true;
+					}
+				}
 
 				sum_time += (gettimeus() - start_time);
 				++loop_count;
@@ -611,6 +751,11 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 					sum_time = 0;
 					loop_count = 1;
 				}
+			}
+			if (output_video.isOpened())
+			{
+				output_video.release();
+				first_save = true;
 			}
 			usleep(20000);
 		}
@@ -625,244 +770,139 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 		printf("SSD thread quit.\n");
 	} while (0);
 
+	if(led_device >= 0)
+    {
+		write(led_device, "0", sizeof(char));
+        close(led_device);
+		led_device = -1;
+		printf("close led\n");
+    }
+
+	if(output_video.isOpened())
+    {
+        output_video.release();
+    }
+
 	return NULL;
 }
 
-static int dump_ply(const char* save_path, const TOFAcquisition::PointCloud &src_cloud)
+// static void *save_video_pthread(void* save_data)
+// {
+// 	int rval = 0;
+// 	bool first_save = true;
+// 	unsigned long long int frame_number = 0;
+// 	cv::Mat image_mat;
+// 	cv::VideoWriter output_video;
+// 	struct timeval tv;  
+//     char time_str[64]; 
+// 	while (run_flag > 0) 
+// 	{
+// 		while(run_lpr > 0)
+// 		{
+// 			pthread_mutex_lock(&image_buffer.lock);  
+// 			if (image_buffer.writepos == image_buffer.readpos)  
+// 			{  
+// 				pthread_cond_wait(&image_buffer.notempty, &image_buffer.lock);  
+// 			}
+// 			image_mat = image_buffer.buffer[image_buffer.readpos];
+// 			image_buffer.readpos++;  
+// 			if (image_buffer.readpos >= IMAGE_BUFFER_SIZE)  
+// 				image_buffer.readpos = 0; 
+// 			pthread_cond_signal(&image_buffer.notfull);  
+// 			pthread_mutex_unlock(&image_buffer.lock);
+// 			if(has_lpr > 0 && first_save)
+// 			{
+// 				if (output_video.isOpened())
+// 				{
+// 					output_video.release();
+// 				}
+// 				std::stringstream filename;
+// 				gettimeofday(&tv, NULL);  
+// 				strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d_%H:%M:%S", localtime(&tv.tv_sec)); 
+// 				filename << "./result_video/" << time_str << ".avi";
+// 				if(output_video.open(filename.str(), cv::VideoWriter::fourcc('X','V','I','D'), 25, \
+// 					cv::Size(image_mat.cols, image_mat.rows)))
+// 				{
+// 					first_save = false;
+// 				}
+// 			}
+// 			else if(has_lpr > 0)
+// 			{
+// 				if (output_video.isOpened())
+// 				{
+// 					output_video.write(image_mat);
+// 				}
+// 			}
+// 			else
+// 			{
+// 				if (output_video.isOpened())
+// 				{
+// 					output_video.release();
+// 					first_save = true;
+// 				}
+// 			}
+// 			std::cout << "save image" << std::endl;
+// 		}
+// 		if (output_video.isOpened())
+// 		{
+// 			output_video.release();
+// 			first_save = true;
+// 		}
+// 		usleep(20000);
+// 		// std::cout << "save video runing" << std::endl;
+// 	}
+// 	if(output_video.isOpened())
+//     {
+//         output_video.release();
+//     }
+// 	std::cout << "stop save video pthread" << std::endl;
+// 	return NULL;
+// }
+
+// static void offline_point_cloud_process()
+// {
+// 	std::string cloud_dir = "./point_cloud/";
+// 	std::vector<std::string> cloud_files;
+// 	int point_count = 0;
+// 	unsigned long long int frame_number = 0;
+// 	std::vector<int> point_cout_list;
+// 	TOFAcquisition::PointCloud src_cloud;
+// 	TOFAcquisition::PointCloud bg_cloud;
+// 	point_cout_list.clear();
+// 	read_bin(bg_point_cloud_file, bg_cloud);
+// 	ListImages(cloud_dir, cloud_files);
+//     std::cout << "total Test cloud : " << cloud_files.size() << std::endl;
+// 	while(run_flag > 0)
+// 	{
+// 		for (size_t index = 0; index < cloud_files.size(); index++) {
+// 			std::stringstream temp_str;
+//         	temp_str << cloud_dir << cloud_files[index];
+// 			std::cout << temp_str.str() << std::endl;
+// 			read_bin(temp_str.str(), src_cloud);
+// 			if(src_cloud.size() > 10)
+// 			{
+// 				run_lpr = 1;
+// 				if(frame_number % 10 == 0)
+// 				{
+// 					vote_in_out(point_cout_list);
+// 					point_cout_list.clear();
+// 				}
+// 				point_count = compute_point_count(bg_cloud, src_cloud);
+// 				std::cout << "point count:" << point_count << std::endl;
+// 				if(point_count > 10)
+// 					point_cout_list.push_back(point_count);
+// 			}
+// 		}
+// 	}
+// }
+
+static void point_cloud_process(const global_control_param_t *G_param, const int *udp_socket_fd)
 {
-	char ply_header[100];
-	sprintf(ply_header, "element vertex %ld\n", src_cloud.size());
-	FILE *fptr;
-	fptr = fopen(save_path, "w");
-
-	fprintf(fptr, "ply\n");
-	fprintf(fptr, "format ascii 1.0\n");
-	fprintf(fptr, "%s", ply_header);
-	fprintf(fptr, "property float x\nproperty float y\nproperty float z\n");
-	fprintf(fptr, "property uchar red\nproperty uchar green\nproperty uchar blue\n");
-	fprintf(fptr, "end_header\n");
-	for (size_t i = 0; i < src_cloud.size(); i++)
-	{
-		fprintf(fptr, "%f %f %f\n", src_cloud[i].x, src_cloud[i].y, src_cloud[i].z);
-		fprintf(fptr, "%d %d %d\n", 255, 0, 0);
-	}
-	fclose(fptr);
-	std::cout << "save ply OK..." << std::endl;
-	return 0;
-}
-
-static int dump_bin(const std::string &save_path, const TOFAcquisition::PointCloud &src_cloud)
-{
-	std::ofstream out_file(save_path, std::ios::binary);
-	for (size_t i = 0; i < src_cloud.size(); i++)
-	{
-		float data[3];
-		data[0] = src_cloud[i].x;
-        data[1] = src_cloud[i].y;
-        data[2] = src_cloud[i].z;
-		out_file.write(reinterpret_cast<char*>(data), sizeof(data));
-	}
-	out_file.close();
-	std::cout << "save bin OK..." << std::endl;
-	return 0;
-}
-
-static bool is_file_exists(const std::string& name) 
-{
-    std::ifstream f(name.c_str());
-    return f.good();
-}
-
-static int read_bin(const std::string &file_path, TOFAcquisition::PointCloud &result_cloud)
-{
-	float data[3] = {0};
-	std::ifstream in_file(file_path, std::ios::in|std::ios::binary);
-	if(!in_file)
-    {
-        std::cout << file_path << " open error!" << std::endl;
-        return -1;
-    }
-	result_cloud.clear();
-	while(in_file.read(reinterpret_cast<char*>(data), sizeof(data)))
-	{
-		TOFAcquisition::Point point;
-		point.x = data[0];
-		point.y = data[1];
-		point.z = data[2];
-		result_cloud.push_back(point);
-	}
-	in_file.close();
-	std::cout << "read bin OK..." << std::endl;
-	return 0;
-}
-
-static int filter_point_cloud( const cv::Mat &depth_map, TOFAcquisition::PointCloud &src_cloud)
-{
-	const uchar* data = depth_map.ptr<uchar>(0);
-	for (auto it = src_cloud.begin(); it != src_cloud.end();)
-    {
-		int index = it->index;
-		if(*(data + index) == 0)
-		{
-			it = src_cloud.erase(it);
-		}
-        else
-		{
-            ++it;
-        }
-    }
-}
-
-static int compute_point_count(const TOFAcquisition::PointCloud &bg_cloud, TOFAcquisition::PointCloud &src_cloud)
-{
-	int result = 0;
-	float min_dist = 1000;
-	float temp_dist = 0;
-	for (size_t i = 0; i < src_cloud.size(); i++)
-	{
-		min_dist = 1000;
-		for (size_t j = 0; j < bg_cloud.size(); j++)
-		{
-			temp_dist = abs(src_cloud[i].z - bg_cloud[j].z);
-			if (temp_dist < min_dist)
-			{
-				min_dist = temp_dist;
-			}
-		}
-		if(min_dist >= 0.1f)
-		{
-			result++;
-		}
-	}
-	return result;
-}
-
-static int compute_depth_map(const cv::Mat &bg_map, const cv::Mat &depth_map)
-{
-	int result = 0;
-	int diff = 0;
-	for (int i = 0; i < depth_map.rows; i++)
-    {
-        const uchar* bg_data = bg_map.ptr<uchar>(i);
-        const uchar* data = depth_map.ptr<uchar>(i);
-        for (int j=0; j<depth_map.cols; j++)
-        {
-			diff = abs(bg_data[j] - data[j]);
-			if(diff > 20)
-			{
-				result++;
-			}
-        }
-    }
-	return result;
-}
-
-static int vote_in_out(const std::vector<int> &point_cout_list)
-{
-	int result = -1;
-	int in_count = 0;
-	int out_count = 0;
-	int diff_count = 0;
-	for(size_t i = 1; i < point_cout_list.size(); i++)
-	{
-		diff_count = point_cout_list[i] - point_cout_list[i-1];
-		if(diff_count >= 10)
-		{
-			in_count++;
-		}
-		else if(diff_count <= -10)
-		{
-			out_count++;
-		}
-	}
-
-	if(in_count > out_count)
-	{
-		result = 0;
-	}
-	else if(in_count < out_count)
-	{
-		result = 1;
-	}
-	return result;
-}
-
-static void get_final_lpr(const std::vector<int> &result_list)
-{
-	int in_count = 0;
-	int out_count = 0;
-	for(size_t i = 1; i < result_list.size(); i++)
-	{
-		if(result_list[i] == 0)
-		{
-			in_count++;
-		}
-		else if(result_list[i] == 1)
-		{
-			out_count++;
-		}
-	}
-	pthread_mutex_lock(&result_mutex);
-	if(in_count > out_count)
-	{
-		if(lpr_result != "")
-		{
-			std::cout << "car in:" << lpr_result << std::endl;
-			lpr_result = "";
-		}
-	}
-	else if(in_count < out_count)
-	{
-		if(lpr_result != "")
-		{
-			std::cout << "car out:" << lpr_result << std::endl;
-			lpr_result = "";
-		}
-	}
-	pthread_mutex_unlock(&result_mutex);
-}
-
-static void offline_point_cloud_process()
-{
-	std::string cloud_dir = "./point_cloud/";
-	std::vector<std::string> cloud_files;
-	int point_count = 0;
-	unsigned long long int frame_number = 0;
-	std::vector<int> point_cout_list;
-	TOFAcquisition::PointCloud src_cloud;
-	TOFAcquisition::PointCloud bg_cloud;
-	point_cout_list.clear();
-	read_bin(bg_point_cloud_file, bg_cloud);
-	ListImages(cloud_dir, cloud_files);
-    std::cout << "total Test cloud : " << cloud_files.size() << std::endl;
-	while(run_flag > 0)
-	{
-		for (size_t index = 0; index < cloud_files.size(); index++) {
-			std::stringstream temp_str;
-        	temp_str << cloud_dir << cloud_files[index];
-			std::cout << temp_str.str() << std::endl;
-			read_bin(temp_str.str(), src_cloud);
-			if(src_cloud.size() > 10)
-			{
-				run_lpr = 1;
-				if(frame_number % 10 == 0)
-				{
-					vote_in_out(point_cout_list);
-					point_cout_list.clear();
-				}
-				point_count = compute_point_count(bg_cloud, src_cloud);
-				std::cout << "point count:" << point_count << std::endl;
-				if(point_count > 10)
-					point_cout_list.push_back(point_count);
-			}
-		}
-	}
-}
-
-static void point_cloud_process()
-{
+	uint64_t debug_time = 0;
+	uint32_t debug_en = G_param->debug_en;
 	int point_count = 0;
 	int is_in = -1;
+	// unsigned long long int update_number = 0;
 	unsigned long long int process_number = 0;
 	unsigned long long int no_process_number = 0;
 	cv::Mat filter_map;
@@ -871,23 +911,54 @@ static void point_cloud_process()
 	std::vector<int> result_list;
 	std::vector<int> point_cout_list;
 	TOFAcquisition::PointCloud src_cloud;
-	if(!is_file_exists(bg_point_cloud_file))
-	{
-		tof_geter.get_tof_data(src_cloud, bg_map);
-		cv::imwrite(bg_point_cloud_file, bg_map);
-	}
-	else
-	{
-		bg_map = cv::imread(bg_point_cloud_file.c_str());
-	}
-	
+
+	cv::Mat img_bgmodel;
+	cv::Mat img_output;
+	IBGS *bgs = new ViBeBGS();
+
+	struct timeval tv;  
+    char time_str[64];
+	int dest_port = 9998;
+	struct sockaddr_in dest_addr = {0};
+    dest_addr.sin_family = AF_INET;
+	dest_addr.sin_port = htons(dest_port);
+	dest_addr.sin_addr.s_addr = inet_addr("10.0.0.102");
+
 	point_cout_list.clear();
+
+	// tof_geter.get_tof_data(src_cloud, depth_map);
+	// // cv::medianBlur(depth_map, bg_map, 3);
+	// cv::GaussianBlur(depth_map, bg_map, cv::Size(9, 9), 3.5, 3.5);
+
 	while(run_flag > 0)
 	{
+		TIME_MEASURE_START(debug_en);
 		tof_geter.get_tof_data(src_cloud, depth_map);
-		cv::medianBlur(depth_map, filter_map, 5);
-		point_count = compute_depth_map(bg_map, filter_map);
-		if(point_count >= 5)
+		TIME_MEASURE_END("[point_cloud] get TOF cost time", debug_en);
+
+		TIME_MEASURE_START(debug_en);
+		// cv::medianBlur(depth_map, filter_map, 3);
+		cv::GaussianBlur(depth_map, filter_map, cv::Size(9, 9), 3.5, 3.5);
+		TIME_MEASURE_END("[point_cloud] filtering cost time", debug_en);
+
+		TIME_MEASURE_START(debug_en);
+		bgs->process(filter_map, img_output, img_bgmodel);
+		TIME_MEASURE_END("[point_cloud] bgs cost time", debug_en);
+
+		point_count = static_cast<int>(cv::sum(img_output / 255)[0]);
+		// point_count = compute_depth_map(bg_map, filter_map);
+		std::cout << "point_count:" << point_count << std::endl;
+
+		// if(process_number % 1 == 0)
+		// {
+		// 	std::stringstream filename;
+		// 	filename << "point_cloud" << process_number << ".png";
+		// 	cv::imwrite(filename.str(), img_output);
+		// 	// dump_bin(filename.str(), src_cloud);
+		// }
+		// process_number++;
+
+		if(point_count > 20)
 		{
 			tof_geter.set_up();
 			run_lpr = 1;
@@ -902,33 +973,130 @@ static void point_cloud_process()
 					result_list.push_back(is_in);
 					point_cout_list.clear();
 				}
-				// if(process_number % 10 == 0)
-				// {
-				// 	std::stringstream filename;
-				// 	filename << "point_cloud" << process_number << ".png";
-				// 	cv::imwrite(filename.str(), filter_map);
-				// 	// dump_bin(filename.str(), src_cloud);
-				// }
 			}
 		}
-		if(point_count < 5 || has_lpr == 0 || is_in == -1)
+		if(point_count <= 20 || has_lpr == 0)
 		{
 			no_process_number++;
 			if(no_process_number % 60 == 0)
 			{
-				get_final_lpr(result_list);
+				int final_result = get_in_out(result_list);
+				// std::cout << "final_result:" << final_result << std::endl;
+				pthread_mutex_lock(&result_mutex);
+				if(final_result >= 0)
+				{
+					if(lpr_result != "" && lpr_confidence > 0)
+					{
+						std::stringstream send_result;
+						gettimeofday(&tv, NULL);  
+						strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d_%H:%M:%S", localtime(&tv.tv_sec)); 
+						send_result << time_str << "|" << final_result << "|" << lpr_result;
+						sendto(*udp_socket_fd, send_result.str().c_str(), strlen(send_result.str().c_str()), \
+							0, (struct sockaddr *)&dest_addr,sizeof(dest_addr));
+						std::cout << send_result.str() << std::endl;
+						lpr_result = "";
+						lpr_confidence = 0;
+					}
+				}
+				pthread_mutex_unlock(&result_mutex);
 				result_list.clear();
+				has_lpr = 0;
 				run_lpr = 0;
 				tof_geter.set_sleep();
 			}
 		}
+		// if(is_in == -1)
+		// {
+		// 	update_number++;
+		// 	std::cout << "is_in:" << is_in << std::endl;
+		// 	if(update_number % 30 == 0)
+		// 	{
+		// 		bg_map = filter_map.clone();
+		// 		update_number = 0;
+		// 	}
+		// }
+		// else
+		// {
+		// 	update_number = 0;
+		// }
+		TIME_MEASURE_END("[point_cloud] cost time", debug_en);
 	}
+	delete bgs;
+    bgs = NULL;
 	std::cout << "stop point cloud process" << std::endl;
+}
+
+static void* upd_broadcast_send(void* save_data)
+{
+	int rval = 0;
+	int broadcast_port = 8888;
+	int on = 1; //开启
+	struct sockaddr_in broadcast_addr = {0};
+	char buf[1024] = "LPR Runing!";
+	int broadcast_socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (broadcast_socket_fd == -1)
+    {
+        printf("create socket failed ! error message :%s\n", strerror(errno));
+        return NULL;
+    }
+	//开启发送广播数据功能
+	rval = setsockopt(broadcast_socket_fd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+	if(rval < 0)
+	{
+		perror("setsockopt fail\n");
+		return NULL;
+	}
+	//设置当前网段的广播地址 
+    broadcast_addr.sin_family = AF_INET;
+    broadcast_addr.sin_port = htons(broadcast_port);
+    broadcast_addr.sin_addr.s_addr = inet_addr("10.0.0.255");  //设置为广播地址
+	while(run_flag > 0)
+	{
+		std::cout << "heart loop!" << std::endl;
+		sendto(broadcast_socket_fd, buf, strlen(buf), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)); 
+		sleep(1);
+	}
+	strcpy(buf, "LPR Stop!");
+	sendto(broadcast_socket_fd, buf, strlen(buf), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)); 
+	close(broadcast_socket_fd);
+	std::cout << "upd broadcast thread quit" << std::endl;
+	return NULL;
+}
+
+static void * upd_recv_msg(void *arg)
+{
+	int ret = 0;
+	int *socket_fd = (int *)arg;//通信的socket
+	struct sockaddr_in  src_addr = {0};  //用来存放对方(信息的发送方)的IP地址信息
+	int len = sizeof(src_addr);	//地址信息的大小
+	char msg[1024] = {0};//消息缓冲区
+	while(run_flag > 0)
+	{
+		ret = recvfrom(*socket_fd, msg, sizeof(msg), 0, (struct sockaddr *)&src_addr, (socklen_t*)len);
+		if(ret > 0)
+		{
+			printf("[%s:%d]",inet_ntoa(src_addr.sin_addr),ntohs(src_addr.sin_port));
+			printf("msg=%s\n",msg);
+			if(strcmp(msg, "exit") == 0 || strcmp(msg, "") == 0)
+			{
+				run_flag = 0;
+				break;
+			}
+			memset(msg, 0, sizeof(msg));//清空存留消息	
+		}
+	}
+	//关闭通信socket
+	close(*socket_fd);
+	std::cout << "upd recv msg thread quit" << std::endl;
+	return NULL;
 }
 
 static int start_all_lpr(global_control_param_t *G_param)
 {
 	int rval = 0;
+	//pthread_t heart_pthread_id = 0;
+	pthread_t pc_recv_thread_id = 0;
+	// pthread_t save_pthread_id = 0;
 	pthread_t ssd_pthread_id = 0;
 	pthread_t lpr_pthread_id = 0;
 	ssd_lpr_thread_params_t lpr_thread_params;
@@ -937,10 +1105,56 @@ static int start_all_lpr(global_control_param_t *G_param)
 	ea_tensor_t *img_tensor = NULL;
 	ea_img_resource_data_t data;
 
+	int upd_port = 9999;
+	int udp_socket_fd = 0;
+	struct sockaddr_in  local_addr = {0};
+	struct timeval timeout;
+
+	if(tof_geter.start() < 0)
+	{
+		rval = -1;
+		run_flag = 0;
+	}
+	std::cout << "start tof success" << std::endl;
+
+	udp_socket_fd = socket(AF_INET,SOCK_DGRAM,0);
+	if(udp_socket_fd < 0 )
+	{
+		perror("creat socket fail\n");
+		rval = -1;
+		run_flag = 0;
+	}
+    timeout.tv_sec = 0;//秒
+    timeout.tv_usec = 100000;//微秒
+    if (setsockopt(udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1) {
+        perror("setsockopt failed:");
+		rval = -1;
+		run_flag = 0;
+    }
+	bzero(&local_addr, sizeof(local_addr));
+	local_addr.sin_family  = AF_INET;
+	local_addr.sin_port	= htons(upd_port);
+	local_addr.sin_addr.s_addr = INADDR_ANY;
+	rval = bind(udp_socket_fd,(struct sockaddr*)&local_addr,sizeof(local_addr));
+	if(rval < 0)
+	{
+		perror("bind fail!");
+		close(udp_socket_fd);
+		rval = -1;
+		run_flag = 0;
+	}
+
 	std::cout << "start_ssd_lpr" << std::endl;
 	do {
 		pthread_mutex_init(&result_mutex, NULL);
 		pthread_mutex_init(&ssd_mutex, NULL);
+
+		pthread_mutex_init(&image_buffer.lock, NULL);  
+		pthread_cond_init(&image_buffer.notempty, NULL);  
+		pthread_cond_init(&image_buffer.notfull, NULL);  
+		image_buffer.readpos = 0;  
+		image_buffer.writepos = 0;
+
 		memset(&lpr_thread_params, 0 , sizeof(lpr_thread_params));
 		memset(&data, 0, sizeof(data));
 		RVAL_OK(ea_img_resource_hold_data(G_param->img_resource, &data));
@@ -961,16 +1175,16 @@ static int start_all_lpr(global_control_param_t *G_param)
 		RVAL_ASSERT(rval == 0);
 		rval = pthread_create(&lpr_pthread_id, NULL, run_lpr_pthread, (void*)&lpr_thread_params);
 		RVAL_ASSERT(rval == 0);
+		// rval = pthread_create(&save_pthread_id, NULL, save_video_pthread, NULL);
+		// RVAL_ASSERT(rval == 0);
+		rval = pthread_create(&pc_recv_thread_id, NULL, upd_recv_msg, (void*)&udp_socket_fd);
+		RVAL_ASSERT(rval == 0);
+		// rval = pthread_create(&heart_pthread_id, NULL, upd_broadcast_send, NULL);
+		// RVAL_ASSERT(rval == 0);
 	} while (0);
 	std::cout << "start_ssd_lpr success" << std::endl;
 
-	if(tof_geter.start() < 0)
-	{
-		rval = -1;
-		run_flag = 0;
-	}
-	std::cout << "start tof success" << std::endl;
-	point_cloud_process();
+	point_cloud_process(G_param, &udp_socket_fd);
 	//offline_point_cloud_process();
 
 	if (lpr_pthread_id > 0) {
@@ -979,7 +1193,20 @@ static int start_all_lpr(global_control_param_t *G_param)
 	if (ssd_pthread_id > 0) {
 		pthread_join(ssd_pthread_id, NULL);
 	}
+	// if (save_pthread_id > 0) {
+	// 	pthread_join(save_pthread_id, NULL);
+	// }
+	if (pc_recv_thread_id > 0) {
+		pthread_join(pc_recv_thread_id, NULL);
+	}
+	// if (heart_pthread_id > 0) {
+	// 	pthread_join(heart_pthread_id, NULL);
+	// }
 	pthread_mutex_destroy(&result_mutex);
+	pthread_mutex_destroy(&ssd_mutex);
+	pthread_mutex_destroy(&image_buffer.lock);
+    pthread_cond_destroy(&image_buffer.notempty);
+    pthread_cond_destroy(&image_buffer.notfull);
 	std::cout << "Main thread quit" << std::endl;
 	return rval;
 }
@@ -989,6 +1216,8 @@ static void sigstop(int signal_number)
 	run_lpr = 0;
 	run_flag = 0;
 	tof_geter.stop();
+	// pthread_cond_signal(&image_buffer.notfull);
+	// pthread_cond_signal(&image_buffer.notempty);
 	printf("sigstop msg, exit live mode\n");
 	return;
 }
@@ -1030,8 +1259,6 @@ static void env_deinit(global_control_param_t *G_param)
 	ea_img_resource_free(G_param->img_resource);
 	G_param->img_resource = NULL;
 	ea_env_close();
-
-	return;
 }
 
 int main(int argc, char **argv)
