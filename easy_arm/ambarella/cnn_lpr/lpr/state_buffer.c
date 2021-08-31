@@ -239,7 +239,7 @@ int read_state_buffer(state_buffer_t *dst_buffer,
 		if (state_buffer_param->verbose) {
 			start_time = 1000000 * current_time.tv_sec + current_time.tv_usec;
 		}
-		get_timeout(&current_time, 1000);
+		get_timeout(&current_time, 2000);
 		timeout.tv_sec = current_time.tv_sec;
 		timeout.tv_nsec = current_time.tv_usec * 1000;
 		rval = sem_timedwait(sem_readable_buf, &timeout);

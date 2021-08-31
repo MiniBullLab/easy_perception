@@ -559,7 +559,7 @@ static int led_process(const cv::Mat &bgr)
 	cv::Scalar left_mean = cv::mean(gray(cv::Rect(0, 0, 300, 300)));  
 	cv::Scalar right_mean = cv::mean(gray(cv::Rect(gray.cols-1-300, 0, 300, 300)));
 	//std::cout << "left:" << left_mean.val[0] << " right:" << right_mean.val[0] << std::endl;
-	if(left_mean.val[0] < 100 && right_mean.val[0] < 100)
+	if(left_mean.val[0] < 80 && right_mean.val[0] < 80)
 	{
 		return 1;
 	}
@@ -598,7 +598,7 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 	uint32_t debug_en = G_param->debug_en;
 
 	bool first_save = true;
-	cv::VideoWriter output_video;
+	// cv::VideoWriter output_video;
 	cv::Mat bgr(ssd_param->height * 2 / 3, ssd_param->width, CV_8UC3);
 	struct timeval tv;  
     char time_str[64];
@@ -710,38 +710,38 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 				RVAL_OK(show_overlay(dsp_pts));
 				TIME_MEASURE_END("[SSD] post-process time", debug_en);
 
-				if(has_lpr > 0 && first_save)
-				{
-					if(output_video.isOpened())
-					{
-						output_video.release();
-					}
-					std::stringstream filename;
-					gettimeofday(&tv, NULL);  
-					strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d_%H:%M:%S", localtime(&tv.tv_sec)); 
-					filename << "./result_video/" << time_str << ".avi";
-					if(output_video.open(filename.str(), cv::VideoWriter::fourcc('X','V','I','D'), 25, \
-						cv::Size(bgr.cols, bgr.rows)))
-					{
-						std::cout << "open video save fail!" << std::endl;
-						first_save = false;
-					}
-				}
-				else if(has_lpr > 0)
-				{
-					if (output_video.isOpened())
-					{
-						output_video.write(bgr);
-					}
-				}
-				else
-				{
-					if(output_video.isOpened())
-					{
-						output_video.release();
-						first_save = true;
-					}
-				}
+				// if(has_lpr > 0 && first_save)
+				// {
+				// 	if(output_video.isOpened())
+				// 	{
+				// 		output_video.release();
+				// 	}
+				// 	std::stringstream filename;
+				// 	gettimeofday(&tv, NULL);  
+				// 	strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d_%H:%M:%S", localtime(&tv.tv_sec)); 
+				// 	filename << "./result_video/" << time_str << ".avi";
+				// 	if(output_video.open(filename.str(), cv::VideoWriter::fourcc('X','V','I','D'), 25, \
+				// 		cv::Size(bgr.cols, bgr.rows)))
+				// 	{
+				// 		std::cout << "open video save fail!" << std::endl;
+				// 		first_save = false;
+				// 	}
+				// }
+				// else if(has_lpr > 0)
+				// {
+				// 	if (output_video.isOpened())
+				// 	{
+				// 		output_video.write(bgr);
+				// 	}
+				// }
+				// else
+				// {
+				// 	if(output_video.isOpened())
+				// 	{
+				// 		output_video.release();
+				// 		first_save = true;
+				// 	}
+				// }
 
 				sum_time += (gettimeus() - start_time);
 				++loop_count;
@@ -752,11 +752,13 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 					loop_count = 1;
 				}
 			}
-			if (output_video.isOpened())
-			{
-				output_video.release();
-				first_save = true;
-			}
+			// if (output_video.isOpened())
+			// {
+			// 	output_video.release();
+			// 	first_save = true;
+			// }
+			has_lpr = 0;
+			write(led_device, "0", sizeof(char));
 			usleep(20000);
 		}
 	} while (0);
@@ -778,10 +780,10 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 		printf("close led\n");
     }
 
-	if(output_video.isOpened())
-    {
-        output_video.release();
-    }
+	// if(output_video.isOpened())
+    // {
+    //     output_video.release();
+    // }
 
 	return NULL;
 }
@@ -902,7 +904,7 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 	uint32_t debug_en = G_param->debug_en;
 	int point_count = 0;
 	int is_in = -1;
-	// unsigned long long int update_number = 0;
+	unsigned long long int update_number = 0;
 	unsigned long long int process_number = 0;
 	unsigned long long int no_process_number = 0;
 	cv::Mat filter_map;
@@ -912,9 +914,9 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 	std::vector<int> point_cout_list;
 	TOFAcquisition::PointCloud src_cloud;
 
-	cv::Mat img_bgmodel;
-	cv::Mat img_output;
-	IBGS *bgs = new ViBeBGS();
+	// cv::Mat img_bgmodel;
+	// cv::Mat img_output;
+	// IBGS *bgs = new ViBeBGS();
 
 	struct timeval tv;  
     char time_str[64];
@@ -926,9 +928,9 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 
 	point_cout_list.clear();
 
-	// tof_geter.get_tof_data(src_cloud, depth_map);
-	// // cv::medianBlur(depth_map, bg_map, 3);
-	// cv::GaussianBlur(depth_map, bg_map, cv::Size(9, 9), 3.5, 3.5);
+	tof_geter.get_tof_data(src_cloud, depth_map);
+	// cv::medianBlur(depth_map, bg_map, 3);
+	cv::GaussianBlur(depth_map, bg_map, cv::Size(9, 9), 3.5, 3.5);
 
 	while(run_flag > 0)
 	{
@@ -941,12 +943,12 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 		cv::GaussianBlur(depth_map, filter_map, cv::Size(9, 9), 3.5, 3.5);
 		TIME_MEASURE_END("[point_cloud] filtering cost time", debug_en);
 
-		TIME_MEASURE_START(debug_en);
-		bgs->process(filter_map, img_output, img_bgmodel);
-		TIME_MEASURE_END("[point_cloud] bgs cost time", debug_en);
+		// TIME_MEASURE_START(debug_en);
+		// bgs->process(filter_map, img_output, img_bgmodel);
+		// TIME_MEASURE_END("[point_cloud] bgs cost time", debug_en);
 
-		point_count = static_cast<int>(cv::sum(img_output / 255)[0]);
-		// point_count = compute_depth_map(bg_map, filter_map);
+		// point_count = static_cast<int>(cv::sum(img_output / 255)[0]);
+		point_count = compute_depth_map(bg_map, filter_map);
 		std::cout << "point_count:" << point_count << std::endl;
 
 		// if(process_number % 1 == 0)
@@ -981,7 +983,7 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 			if(no_process_number % 60 == 0)
 			{
 				int final_result = get_in_out(result_list);
-				// std::cout << "final_result:" << final_result << std::endl;
+				std::cout << "final_result:" << final_result << std::endl;
 				pthread_mutex_lock(&result_mutex);
 				if(final_result >= 0)
 				{
@@ -1005,24 +1007,24 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 				tof_geter.set_sleep();
 			}
 		}
-		// if(is_in == -1)
-		// {
-		// 	update_number++;
-		// 	std::cout << "is_in:" << is_in << std::endl;
-		// 	if(update_number % 30 == 0)
-		// 	{
-		// 		bg_map = filter_map.clone();
-		// 		update_number = 0;
-		// 	}
-		// }
-		// else
-		// {
-		// 	update_number = 0;
-		// }
+		if(is_in == -1)
+		{
+			update_number++;
+			std::cout << "is_in:" << is_in << std::endl;
+			if(update_number % 60 == 0)
+			{
+				bg_map = filter_map.clone();
+				update_number = 0;
+			}
+		}
+		else
+		{
+			update_number = 0;
+		}
 		TIME_MEASURE_END("[point_cloud] cost time", debug_en);
 	}
-	delete bgs;
-    bgs = NULL;
+	// delete bgs;
+    // bgs = NULL;
 	std::cout << "stop point cloud process" << std::endl;
 }
 
