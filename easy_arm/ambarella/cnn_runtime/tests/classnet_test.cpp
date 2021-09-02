@@ -5,8 +5,8 @@
 #include "cnn_runtime/classify/classnet.h"
 
 const static std::string model_path = "./classnet.bin";
-const static std::string input_name = "0";
-const static std::string output_name = "198";
+const static std::string input_name = "cls_input";
+const static std::string output_name = "cls_output";
 
 static void image_dir_infer(const std::string &image_dir){
     unsigned long time_start, time_end;

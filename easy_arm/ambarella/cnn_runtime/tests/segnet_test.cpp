@@ -6,8 +6,8 @@
 #include "cnn_runtime/segment/segnet.h"
 
 const static std::string model_path = "./segnet.bin";
-const static std::string input_name = "0";
-const static std::string output_name = "507";
+const static std::string input_name = "seg_input";
+const static std::string output_name = "seg_output";
 
 
 void image_txt_infer(const std::string &image_dir, const std::string &image_txt_path){
