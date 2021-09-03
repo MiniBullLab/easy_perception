@@ -559,7 +559,7 @@ static int led_process(const cv::Mat &bgr)
 	cv::Scalar left_mean = cv::mean(gray(cv::Rect(0, 0, 300, 300)));  
 	cv::Scalar right_mean = cv::mean(gray(cv::Rect(gray.cols-1-300, 0, 300, 300)));
 	//std::cout << "left:" << left_mean.val[0] << " right:" << right_mean.val[0] << std::endl;
-	if(left_mean.val[0] < 80 && right_mean.val[0] < 80)
+	if(left_mean.val[0] < 50 && right_mean.val[0] < 50)
 	{
 		return 1;
 	}
@@ -757,8 +757,8 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 			// 	output_video.release();
 			// 	first_save = true;
 			// }
-			has_lpr = 0;
 			write(led_device, "0", sizeof(char));
+			has_lpr = 0;
 			usleep(20000);
 		}
 	} while (0);
@@ -902,9 +902,9 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 {
 	uint64_t debug_time = 0;
 	uint32_t debug_en = G_param->debug_en;
-	int point_count = 0;
-	int is_in = -1;
-	unsigned long long int update_number = 0;
+	int bg_point_count = 0;
+	// int is_in = -1;
+	// int point_count = 0;
 	unsigned long long int process_number = 0;
 	unsigned long long int no_process_number = 0;
 	cv::Mat filter_map;
@@ -914,9 +914,9 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 	std::vector<int> point_cout_list;
 	TOFAcquisition::PointCloud src_cloud;
 
-	// cv::Mat img_bgmodel;
-	// cv::Mat img_output;
-	// IBGS *bgs = new ViBeBGS();
+	cv::Mat img_bgmodel;
+	cv::Mat img_output;
+	IBGS *bgs = new ViBeBGS();
 
 	struct timeval tv;  
     char time_str[64];
@@ -926,6 +926,7 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 	dest_addr.sin_port = htons(dest_port);
 	dest_addr.sin_addr.s_addr = inet_addr("10.0.0.102");
 
+	result_list.clear();
 	point_cout_list.clear();
 
 	tof_geter.get_tof_data(src_cloud, depth_map);
@@ -943,13 +944,14 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 		cv::GaussianBlur(depth_map, filter_map, cv::Size(9, 9), 3.5, 3.5);
 		TIME_MEASURE_END("[point_cloud] filtering cost time", debug_en);
 
-		// TIME_MEASURE_START(debug_en);
-		// bgs->process(filter_map, img_output, img_bgmodel);
-		// TIME_MEASURE_END("[point_cloud] bgs cost time", debug_en);
+		TIME_MEASURE_START(debug_en);
+		bgs->process(filter_map, img_output, img_bgmodel);
+		bg_point_count = static_cast<int>(cv::sum(img_output / 255)[0]);
+		std::cout << "bg_point_count:" << bg_point_count << std::endl;
+		TIME_MEASURE_END("[point_cloud] bgs cost time", debug_en);
 
-		// point_count = static_cast<int>(cv::sum(img_output / 255)[0]);
-		point_count = compute_depth_map(bg_map, filter_map);
-		std::cout << "point_count:" << point_count << std::endl;
+		//point_count = compute_depth_map(bg_map, filter_map);
+		//std::cout << "point_count:" << point_count << std::endl;
 
 		// if(process_number % 1 == 0)
 		// {
@@ -960,29 +962,29 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 		// }
 		// process_number++;
 
-		if(point_count > 20)
+		if(bg_point_count > 50)
 		{
 			tof_geter.set_up();
 			run_lpr = 1;
 			if(has_lpr == 1)
 			{
-				no_process_number = 0;
-				process_number++;
-				point_cout_list.push_back(point_count);
-				if(process_number % 10 == 0)
-				{
-					is_in = vote_in_out(point_cout_list);
-					result_list.push_back(is_in);
-					point_cout_list.clear();
-				}
+				point_cout_list.push_back(bg_point_count);
+				// process_number++;
+				// if(process_number % 10 == 0)
+				// {
+				// 	is_in = vote_in_out(point_cout_list);
+				// 	result_list.push_back(is_in);
+				// 	point_cout_list.clear();
+				// }
 			}
 		}
-		if(point_count <= 20 || has_lpr == 0)
+		if(bg_point_count <= 50 || has_lpr == 0)
 		{
 			no_process_number++;
-			if(no_process_number % 60 == 0)
+			if(no_process_number % 10 == 0)
 			{
-				int final_result = get_in_out(result_list);
+				//int final_result = get_in_out(result_list);
+				int final_result = vote_in_out(point_cout_list);
 				std::cout << "final_result:" << final_result << std::endl;
 				pthread_mutex_lock(&result_mutex);
 				if(final_result >= 0)
@@ -1001,30 +1003,24 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 					}
 				}
 				pthread_mutex_unlock(&result_mutex);
+				point_cout_list.clear();
 				result_list.clear();
+				process_number = 0;
+				no_process_number = 0;
 				has_lpr = 0;
 				run_lpr = 0;
 				tof_geter.set_sleep();
-			}
-		}
-		if(is_in == -1)
-		{
-			update_number++;
-			std::cout << "is_in:" << is_in << std::endl;
-			if(update_number % 60 == 0)
-			{
 				bg_map = filter_map.clone();
-				update_number = 0;
 			}
 		}
 		else
 		{
-			update_number = 0;
+			no_process_number = 0;
 		}
 		TIME_MEASURE_END("[point_cloud] cost time", debug_en);
 	}
-	// delete bgs;
-    // bgs = NULL;
+	delete bgs;
+    bgs = NULL;
 	std::cout << "stop point cloud process" << std::endl;
 }
 

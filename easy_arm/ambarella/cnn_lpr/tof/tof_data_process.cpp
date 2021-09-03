@@ -78,7 +78,7 @@ int compute_depth_map(const cv::Mat &bg_map, const cv::Mat &depth_map)
         for (int j=0; j<depth_map.cols; j++)
         {
 			diff = abs(bg_data[j] - data[j]);
-			if(diff > 50)
+			if(diff > 80)
 			{
 				result++;
 			}
@@ -90,35 +90,70 @@ int compute_depth_map(const cv::Mat &bg_map, const cv::Mat &depth_map)
 int vote_in_out(const std::vector<int> &point_cout_list)
 {
 	int result = -1;
-	int in_count = 0;
-	int out_count = 0;
 	int diff_count = 0;
-	for(size_t i = 1; i < point_cout_list.size(); i++)
+	int all_count = 0;
+	for(size_t i = 1; i < point_cout_list.size();i++)
 	{
 		diff_count = point_cout_list[i] - point_cout_list[i-1];
-		if(diff_count > 30)
+		if(diff_count > 50)
 		{
-			in_count++;
+			all_count += diff_count;
 		}
-		else if(diff_count < -30)
+		else if(diff_count < -100)
 		{
-			out_count++;
+			all_count += (diff_count / 2);
 		}
 	}
-
-	if(in_count > out_count)
+	
+	if(all_count > 0)
 	{
-		result = 0;
+		return 0;
 	}
-	else if(in_count < out_count)
+	else if(all_count < 0)
 	{
-		result = 1;
+		return 1;
 	}
 	return result;
 }
 
 int get_in_out(const std::vector<int> &result_list)
 {
+	// cv::Mat result = cv::Mat::zeros(cv::Size(1, 3), CV_64FC1);
+	// cv::Mat A = cv::Mat::zeros(cv::Size(3, result_list.size()), CV_64FC1);
+	// cv::Mat b = cv::Mat::zeros(cv::Size(1, result_list.size()), CV_64FC1);
+	// cv::Mat c;
+	// cv::Mat d;
+	// double axis = 0;
+	// if(result_list.size() < 3)
+	// 	return -1;
+    // for (int i = 0; i < result_list.size(); i++)
+    // {
+    //     A.at<double>(i, 0) = 1;
+    //     A.at<double>(i, 1) = i;
+    //     A.at<double>(i, 2) = i * i;
+    // }
+    
+    // for (int i = 0; i < result_list.size(); i++)
+    // {
+    //     b.at<double>(i, 0) = (double)result_list[i];
+    // }
+
+    // c = A.t() * A;
+    // d = A.t() * b;
+	// axis = -result.at<double>(1, 0) / result.at<double>(2, 0) / 2;
+	// std::cout << "axis:" << axis << std::endl;
+	// if(axis > 3)
+	// {
+	// 	return 0;
+	// }
+	// else if(axis > 0)
+	// {
+	// 	return 1;
+	// }
+	// else
+	// {
+	// 	return -1;
+	// }
 	int in_count = 0;
 	int out_count = 0;
 	for(size_t i = 1; i < result_list.size(); i++)
