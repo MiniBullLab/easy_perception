@@ -2,38 +2,39 @@
 #include <sstream>
 #include <opencv2/imgcodecs.hpp>
 #include "utility/utils.h"
-#include "cnn_runtime/classify/classnet.h"
+#include "cnn_runtime/one_class/one_class_net.h"
 
-const static std::string model_path = "./classnet.bin";
-const static std::string input_name = "cls_input";
-const static std::string output_name = "cls_output";
+const static std::string model_path = "./OneClassNet.bin";
+const static std::string embedding_file = "./embedding.bin";
+const static std::string input_name = "one_class_input";
+const static std::string output_name = "one_class_output";
 
 static void image_dir_infer(const std::string &image_dir){
     unsigned long time_start, time_end;
     std::vector<std::string> images;
     std::ofstream save_result;
-    int class_idx = -1;
+    float score = 0.0;
     cv::Mat src_img;
-    ClassNet classnet_process;
-    if(classnet_process.init(model_path, input_name, output_name) < 0)
+    OneClassNet oneClassNet_process;
+    if(oneClassNet_process.init(model_path, input_name, output_name) < 0)
     {
-        std::cout << "ClassNet init fail!" << std::endl;
+        std::cout << "OneClassNet init fail!" << std::endl;
         return;
     }
     ListImages(image_dir, images);
     std::cout << "total Test images : " << images.size() << std::endl;
-    save_result.open("./cls_result.txt");
+    save_result.open("./one_class_result.txt");
     for (size_t index = 0; index < images.size(); index++) {
 		std::stringstream temp_str;
         temp_str << image_dir << images[index];
 		std::cout << temp_str.str() << std::endl;
 		src_img = cv::imread(temp_str.str());
         time_start = get_current_time();
-        class_idx = classnet_process.run(src_img);
+        score = oneClassNet_process.run(src_img, embedding_file);
         time_end = get_current_time();
-        std::cout << "classnet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
+        std::cout << "OneClassNet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
 
-        save_result << images[index] << " " << class_idx << "\n";
+        save_result << images[index] << " " << score << "\n";
     }
     save_result.close();
 }
@@ -42,13 +43,13 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
     unsigned long time_start, time_end;
     std::ofstream save_result;
     std::ifstream read_txt;
-    int class_idx = -1;
+    float score = 0.0;
     std::string line_data;
     cv::Mat src_img;
-    ClassNet classnet_process;
-    if(classnet_process.init(model_path, input_name, output_name) < 0)
+    OneClassNet oneClassNet_process;
+    if(oneClassNet_process.init(model_path, input_name, output_name) < 0)
     {
-        std::cout << "ClassNet init fail!" << std::endl;
+        std::cout << "OneClassNet init fail!" << std::endl;
         return;
     }
 
@@ -58,7 +59,7 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
         return;
     }
     
-    save_result.open("./cls_result.txt");
+    save_result.open("./one_class_result.txt");
     while(std::getline(read_txt, line_data)){
         if(line_data.empty()){
             continue;
@@ -70,11 +71,11 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
         std::cout << image_path.str() << std::endl;
         src_img = cv::imread(image_path.str());
         time_start = get_current_time();
-        class_idx = classnet_process.run(src_img);
+        score = oneClassNet_process.run(src_img, embedding_file);
         time_end = get_current_time();
-        std::cout << "classnet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
+        std::cout << "OneClassNet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
 
-        save_result << image_name << " " << class_idx << "\n";
+        save_result << image_name << " " << score << "\n";
     }
     read_txt.close();
     save_result.close();
@@ -83,8 +84,9 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
 int main()
 {
     std::cout << "start..." << std::endl;
-    std::string image_dir = "./test_images/";
-    image_dir_infer(image_dir);
+    const std::string image_dir = "./test_images/";
+    const std::string image_txt_path = "./val.txt";
+    image_txt_infer(image_dir, image_txt_path);
     std::cout << "End of game!!!" << std::endl;
     return 0;
 }

@@ -56,7 +56,7 @@ cv::Mat SegNet::run(const cv::Mat &srcImage)
 
     for (int h = 0; h < output_h; h++)
     {
-        memcpy(segnetOutput + h * output_w, tempOutput[0] + h * output_p, output_p * sizeof(float));
+        memcpy(segnetOutput + h * output_w, tempOutput[0] + h * output_p, output_w * sizeof(float));
     }
 
     // std::ofstream ouF;

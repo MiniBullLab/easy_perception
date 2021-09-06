@@ -67,6 +67,21 @@ cv::Size get_input_size(nnctrl_ctx_t *nnctrl_ctx)
     return dst_size;
 }
 
+cv::Size get_output_size(nnctrl_ctx_t *nnctrl_ctx)
+{
+    // int channel = nnctrl_ctx->net.net_in.in_desc[0].dim.depth;
+    int output_h = nnctrl_ctx->net.net_out.out_desc[0].dim.height;
+    int output_w = nnctrl_ctx->net.net_out.out_desc[0].dim.width;
+    cv::Size dst_size(output_w, output_h);
+    return dst_size;
+}
+
+int get_output_channel(nnctrl_ctx_t *nnctrl_ctx)
+{
+    int channel = nnctrl_ctx->net.net_out.out_desc[0].dim.depth;
+    return channel;
+}
+
 int get_input_pitch(nnctrl_ctx_t *nnctrl_ctx)
 {
     int pitch = nnctrl_ctx->net.net_in.in_desc[0].dim.pitch;
