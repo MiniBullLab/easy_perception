@@ -4,12 +4,11 @@
 #include "cnn_runtime/cnn_common/image_process.h"
 #include <iostream>
 
-#define CLASS_NUM (100)
-
 ClassNet::ClassNet()
 {
     memset(&cavalry_ctx, 0, sizeof(cavalry_ctx_t));
     memset(&nnctrl_ctx, 0, sizeof(nnctrl_ctx_t));
+    class_number = 0;
     threshold = 0;
     classnetOutput = NULL;
 }
@@ -26,14 +25,15 @@ ClassNet::~ClassNet()
 }
 
 int ClassNet::init(const std::string &modelPath, const std::string &inputName, \
-                   const std::string &outputName, const float threshold)
+                   const std::string &outputName, const int class_num, const float threshold)
 {
     int rval = 0;
     set_net_param(&nnctrl_ctx, modelPath.c_str(), \
                     inputName.c_str(), outputName.c_str());
     rval = cnn_init(&nnctrl_ctx, &cavalry_ctx);
+    this->class_number = class_num;
     this->threshold = threshold;
-    this->classnetOutput = new float[CLASS_NUM];
+    this->classnetOutput = new float[class_number];
 
     return rval;
 }
@@ -52,14 +52,14 @@ int ClassNet::run(const cv::Mat &srcImage)
     std::cout << "output size: " << "--output_c: " << output_c << "--output_h: " << output_h << "--output_w: " \
                                   << output_w << "--output_p: " << output_p << "--" << std::endl;
 
-    for (int i=0; i < CLASS_NUM; i++) 
+    for (int i=0; i < class_number; i++) 
     {
         classnetOutput[i] = DIM1_DATA(tempOutput[0], i);
     }
 
     // std::ofstream ouF;
     // ouF.open("./score.bin", std::ofstream::binary);
-    // ouF.write(reinterpret_cast<const char*>(classnetOutput), sizeof(float) * CLASS_NUM);
+    // ouF.write(reinterpret_cast<const char*>(classnetOutput), sizeof(float) * class_number);
     // ouF.close();
     result = postprocess(classnetOutput);
     return result;
@@ -69,7 +69,7 @@ int ClassNet::postprocess(const float *output)
 {
     float id_max = -100;
     int class_idx = 0;
-    for (int id = 0; id < CLASS_NUM; id++) {
+    for (int id = 0; id < class_number; id++) {
         if (output[id] > id_max) {
             id_max = output[id];
             class_idx = id;

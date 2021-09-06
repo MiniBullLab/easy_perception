@@ -2,34 +2,12 @@
 #include "cnn_runtime/cnn_common/net_process.h"
 #include "cnn_runtime/cnn_common/blob_define.h"
 #include "cnn_runtime/cnn_common/image_process.h"
+#include "cnn_runtime/one_class/patchcore_postprocess.h"
 #include <iostream>
 
-// anothers
-#include <opencv2/ml.hpp>
-#include <fstream>
+
 
 #define KNEIGHBOURS (9)
-
-void reshape_embedding(const float *output, \
-                       cv::Mat embedding_test, \
-                       const int out_channel, \ 
-                       const int out_height, \
-                       const int out_width)
-{
-    for (int h = 0; h < out_height; h++)
-    {
-        for (int w = 0; w < out_width; w++)
-        {
-            for (int c = 0; c < out_channel; c++)
-            {
-                ((float*)embedding_test.data)[h*out_width*out_channel + w*out_channel + c] = 
-                    output[c*out_height*out_height + h*out_width + w];
-                // memcpy(embedding_test.data + h*out_width*out_channel + w*out_channel + c, \
-                // embedding_array.data + c*out_height*out_height + h*out_width + w, sizeof(float));
-            }
-        }
-    }
-}
 
 OneClassNet::OneClassNet()
 {
@@ -54,13 +32,15 @@ int OneClassNet::init(const std::string &modelPath, const std::string &inputName
                    const std::string &outputName, const float threshold)
 {
     int rval = 0;
+    cv::Size outputSize;
+    int outputChannel;
     set_net_param(&nnctrl_ctx, modelPath.c_str(), \
                     inputName.c_str(), outputName.c_str());
     rval = cnn_init(&nnctrl_ctx, &cavalry_ctx);
     this->threshold = threshold;
-    this->outputSize = get_output_size(&nnctrl_ctx);
-    this->outputChannel = get_output_channel(&nnctrl_ctx);
-    this->oneClassOutput = new float[this->outputSize.height * this->outputSize.width * this->outputChannel];
+    outputChannel = get_output_channel(&nnctrl_ctx);
+    outputSize = get_output_size(&nnctrl_ctx);
+    this->oneClassOutput = new float[outputChannel * outputSize.height * outputSize.width];
 
     return rval;
 }
@@ -88,30 +68,19 @@ float OneClassNet::run(const cv::Mat &srcImage, const std::string &embedding_fil
         }
     }
 
-    result = postprocess(oneClassOutput, embedding_file, output_c, output_h, output_w);
+    result = postprocess(oneClassOutput, embedding_file);
     std::cout << "result: " << result << std::endl;
     return result;
 }
 
 float OneClassNet::postprocess(const float *output,
-                        const std::string &embedding_file, \ 
-                        const int out_channel, \ 
-                        const int out_height, \
-                        const int out_width)
+                        const std::string &embedding_file)
 {
-    std::ifstream embedding(embedding_file, std::ios::binary|std::ios::in);
-    embedding.seekg(0,std::ios::end);
-    int embedding_length = embedding.tellg() / sizeof(float);
-    embedding.seekg(0, std::ios::beg);
-    float* embedding_coreset = new float[embedding_length];
-    embedding.read(reinterpret_cast<char*>(embedding_coreset), sizeof(float) * embedding_length);
-    embedding.close();
-
-    cv::Mat embedding_train(embedding_length / out_channel, out_channel, CV_32FC1);
-    cv::Mat embedding_test(out_height*out_width, out_channel, CV_32FC1);
-
-    memcpy(embedding_train.data, embedding_coreset, embedding_length * sizeof(float));
-    reshape_embedding(output, embedding_test, out_channel, out_height, out_width);
+    int out_channel = nnctrl_ctx.net.net_out.out_desc[0].dim.depth;
+    int out_height = nnctrl_ctx.net.net_out.out_desc[0].dim.height;
+    int out_width = nnctrl_ctx.net.net_out.out_desc[0].dim.width;
+    cv::Mat embedding_train = train_embedding_process(embedding_file, out_channel);
+    cv::Mat embedding_test = reshape_embedding(output, out_channel, out_height, out_width);
 
     //----------------------------knn---------------------------
     const int K(KNEIGHBOURS);

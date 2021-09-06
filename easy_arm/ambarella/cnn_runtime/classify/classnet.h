@@ -9,8 +9,11 @@ class ClassNet{
 public:
     ClassNet();
     ~ClassNet();
-    int init(const std::string &modelPath, const std::string &inputName, 
-             const std::string &outputName, const float threshold=0.1f);
+    int init(const std::string &modelPath, 
+             const std::string &inputName, 
+             const std::string &outputName, 
+             const int class_num=100,
+             const float threshold=0.1f);
     int run(const cv::Mat &srcImage);
 
 private:
@@ -19,6 +22,7 @@ private:
 private:
     cavalry_ctx_t cavalry_ctx;
     nnctrl_ctx_t nnctrl_ctx;
+    int class_number;
     float threshold;
     float *classnetOutput;
 };

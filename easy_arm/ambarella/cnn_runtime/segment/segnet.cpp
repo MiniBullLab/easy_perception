@@ -61,7 +61,7 @@ cv::Mat SegNet::run(const cv::Mat &srcImage)
 
     // std::ofstream ouF;
     // ouF.open("./score.bin", std::ofstream::binary);
-    // ouF.write(reinterpret_cast<const char*>(classnetOutput), sizeof(float) * CLASS_NUM);
+    // ouF.write(reinterpret_cast<const char*>(tempOutput[0]), sizeof(float) * CLASS_NUM);
     // ouF.close();
     postprocess(segnetOutput, 0, srcSize, this->inputSize, result);
     return result;

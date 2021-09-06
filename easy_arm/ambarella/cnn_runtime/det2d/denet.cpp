@@ -74,7 +74,7 @@ std::vector<std::vector<float>> DeNet::run(const cv::Mat &srcImage)
 
     // std::ofstream ouF;
     // ouF.open("./score.bin", std::ofstream::binary);
-    // ouF.write(reinterpret_cast<const char*>(classnetOutput), sizeof(float) * CLASS_NUM);
+    // ouF.write(reinterpret_cast<const char*>(output[0]), sizeof(float) * CLASS_NUM);
     // ouF.close();
     boxes = postprocess(srcSize, inputSize, output);
     return boxes;

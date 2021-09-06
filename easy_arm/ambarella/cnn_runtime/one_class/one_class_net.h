@@ -15,16 +15,11 @@ public:
 
 private:
     float postprocess(const float *output,
-                    const std::string &embedding_file, \ 
-                    const int out_channel, \ 
-                    const int out_height, \
-                    const int out_width);
+                      const std::string &embedding_file);
 
 private:
     cavalry_ctx_t cavalry_ctx;
     nnctrl_ctx_t nnctrl_ctx;
     float threshold;
     float *oneClassOutput;
-    cv::Size outputSize;
-    int outputChannel;
 };
