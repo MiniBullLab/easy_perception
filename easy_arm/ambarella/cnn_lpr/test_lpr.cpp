@@ -80,11 +80,15 @@ const static std::vector<std::string> lphm_output_name = {"dense"};
 const static std::string bg_point_cloud_file = "./bg.png";
 
 static float lpr_confidence = 0;
+static bbox_param_t lpr_bbox;
 static std::string lpr_result = "";
 
 volatile int has_lpr = 0;
 static pthread_mutex_t result_mutex;
 static pthread_mutex_t ssd_mutex;
+
+volatile int run_flag = 1;
+volatile int run_lpr = 0;
 
 struct ImageBuffer  
 {  	
@@ -146,9 +150,6 @@ enum cavalry_priotiry {
 	LPR_PRIORITY,
 	PRIORITY_NUM
 };
-
-volatile int run_flag = 1;
-volatile int run_lpr = 0;
 
 TOFAcquisition tof_geter;
 struct ImageBuffer image_buffer;
@@ -426,6 +427,10 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 				if(license_result.license_num > 0)
 				{
 					pthread_mutex_lock(&result_mutex);
+					lpr_bbox.norm_min_x = bbox_param[0].norm_min_x;
+					lpr_bbox.norm_min_y = bbox_param[0].norm_min_y;
+					lpr_bbox.norm_max_x = bbox_param[0].norm_max_x;
+					lpr_bbox.norm_max_y = bbox_param[0].norm_max_y;
 					if (license_result.license_info[0].conf > G_param->recg_threshold && \
 						strlen(license_result.license_info[0].text) == CHINESE_LICENSE_STR_LEN && \
 						license_result.license_info[0].conf > lpr_confidence)
@@ -588,7 +593,7 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 	// image related
 	ea_tensor_t *img_tensor = NULL;
 	ea_img_resource_data_t data;
-	uint32_t dsp_pts;
+	uint32_t dsp_pts = 0;
 
 	// Time measurement
 	uint64_t start_time = 0;
@@ -597,11 +602,11 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 	uint32_t loop_count = 1;
 	uint32_t debug_en = G_param->debug_en;
 
-	bool first_save = true;
-	// cv::VideoWriter output_video;
-	cv::Mat bgr(ssd_param->height * 2 / 3, ssd_param->width, CV_8UC3);
-	struct timeval tv;  
-    char time_str[64];
+    cv::Mat bgr(ssd_param->height * 2 / 3, ssd_param->width, CV_8UC3);
+	// bool first_save = true;
+	// // cv::VideoWriter output_video;
+	// struct timeval tv;  
+    // char time_str[64];
 
 	int is_night = 0;
 	int led_device = open("/sys/devices/platform/e4000000.n_apb/e4008000.i2c/i2c-0/0-0064/leds/lm36011:torch/brightness", O_RDWR, 0);
@@ -760,6 +765,9 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 			write(led_device, "0", sizeof(char));
 			has_lpr = 0;
 			usleep(20000);
+			// bbox_list.bbox_num = 0;
+			// RVAL_OK(set_overlay_bbox(&bbox_list));
+		    // RVAL_OK(show_overlay(dsp_pts));
 		}
 	} while (0);
 	do {
@@ -904,7 +912,6 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 	uint32_t debug_en = G_param->debug_en;
 	int bg_point_count = 0;
 	// int is_in = -1;
-	// int point_count = 0;
 	unsigned long long int process_number = 0;
 	unsigned long long int no_process_number = 0;
 	cv::Mat filter_map;
@@ -950,9 +957,6 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 		std::cout << "bg_point_count:" << bg_point_count << std::endl;
 		TIME_MEASURE_END("[point_cloud] bgs cost time", debug_en);
 
-		//point_count = compute_depth_map(bg_map, filter_map);
-		//std::cout << "point_count:" << point_count << std::endl;
-
 		// if(process_number % 1 == 0)
 		// {
 		// 	std::stringstream filename;
@@ -983,13 +987,42 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 			no_process_number++;
 			if(no_process_number % 10 == 0)
 			{
-				//int final_result = get_in_out(result_list);
 				int final_result = vote_in_out(point_cout_list);
+				//int final_result = get_in_out(result_list);
+				int point_count = compute_depth_map(bg_map, filter_map);
+				std::cout << "final point_count:" << point_count << " " << final_result << std::endl;
+				// if(lpr_confidence > 0 && final_result == -1 && point_count >= 500)
+				// {
+				// 	final_result = 0;
+				// }
+				if(final_result == 0 && point_count >= 500)
+				{
+					final_result = 0;
+				}
+				else if(final_result == 0 && point_count < 100)
+				{
+					final_result = 1;
+				}
+				else if(final_result == 1 && point_count >= 500)
+				{
+					final_result = 0;
+				}
 				std::cout << "final_result:" << final_result << std::endl;
 				pthread_mutex_lock(&result_mutex);
 				if(final_result >= 0)
 				{
 					if(lpr_result != "" && lpr_confidence > 0)
+					{
+						std::stringstream send_result;
+						gettimeofday(&tv, NULL);  
+						strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d_%H:%M:%S", localtime(&tv.tv_sec)); 
+						send_result << time_str << "|" << final_result << "|" << lpr_result;
+						sendto(*udp_socket_fd, send_result.str().c_str(), strlen(send_result.str().c_str()), \
+							0, (struct sockaddr *)&dest_addr,sizeof(dest_addr));
+						std::cout << send_result.str() << std::endl;
+						lpr_confidence = 0;
+					}
+					else if(final_result == 1 && lpr_result != "")
 					{
 						std::stringstream send_result;
 						gettimeofday(&tv, NULL);  
@@ -1010,7 +1043,6 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 				has_lpr = 0;
 				run_lpr = 0;
 				tof_geter.set_sleep();
-				bg_map = filter_map.clone();
 			}
 		}
 		else

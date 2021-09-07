@@ -1455,6 +1455,7 @@ void TOFAcquisition::set_sleep()
 void TOFAcquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map)
 {
 	int i, j, index;
+	float inv_dst = 0;
 	float max_dst = 0;
 	uchar* depth_ptr = depth_map.ptr<uchar>(0);
 	if (sensor_type == SENSOR_IMX316) {
@@ -1462,7 +1463,7 @@ void TOFAcquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map)
 	} else {
 		max_dst = MAX_DIST_456;
 	}
-	max_dst = 3.8f;
+	max_dst = 3.0f;
 	point_cloud.clear(); 
     pthread_mutex_lock(&tof_buffer.lock);  
     if (tof_buffer.writepos == tof_buffer.readpos)  
@@ -1489,7 +1490,8 @@ void TOFAcquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map)
 				 } 
 				 else 
 				 {
-					*depth_ptr = static_cast<uchar>(tof_buffer.buffer_z[tof_buffer.readpos][i] * 255 / max_dst);
+					 inv_dst = max_dst - tof_buffer.buffer_z[tof_buffer.readpos][i];
+					*depth_ptr = static_cast<uchar>(inv_dst * 255 / max_dst);
 				 }
 		depth_ptr++;
 	} 

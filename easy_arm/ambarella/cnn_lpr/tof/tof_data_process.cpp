@@ -92,16 +92,21 @@ int vote_in_out(const std::vector<int> &point_cout_list)
 	int result = -1;
 	int diff_count = 0;
 	int all_count = 0;
+	size_t point_size = point_cout_list.size();
+	if(point_size == 1)
+	{
+		all_count = 0 - point_cout_list[0];
+	}
 	for(size_t i = 1; i < point_cout_list.size();i++)
 	{
 		diff_count = point_cout_list[i] - point_cout_list[i-1];
 		if(diff_count > 20)
 		{
-			all_count += diff_count * 2;
+			all_count += diff_count * 3;
 		}
-		else if(diff_count < -100)
+		else if(diff_count < -20)
 		{
-			all_count += (diff_count / 2);
+			all_count += (diff_count / 3);
 		}
 	}
 	

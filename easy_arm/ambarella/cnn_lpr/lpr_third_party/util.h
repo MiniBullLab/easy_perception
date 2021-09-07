@@ -270,6 +270,6 @@ namespace util{
         cv::Mat histA,histB;
         histA = calcHist(A);
         histB = calcHist(B);
-        return cv::compareHist(histA,histB, CV_COMP_CORREL);
+        return cv::compareHist(histA,histB,CV_COMP_CORREL);
     }
 }//namespace util
