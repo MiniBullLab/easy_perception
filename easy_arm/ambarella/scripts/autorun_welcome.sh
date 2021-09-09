@@ -24,7 +24,4 @@ ntpdate 10.0.0.102 &
 
 export LD_LIBRARY_PATH=/data:$LD_LIBRARY_PATH
 
-if [ ! -d "./result_video" ]; then
-    mkdir ./result_video
-fi
-./test_lpr
+/data/test_lpr &

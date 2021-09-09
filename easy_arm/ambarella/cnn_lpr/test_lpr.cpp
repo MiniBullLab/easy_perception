@@ -64,23 +64,22 @@
 
 EA_LOG_DECLARE_LOCAL(EA_LOG_LEVEL_NOTICE);
 
-const static std::string ssd_model_path = "./lpr/mobilenetv1_ssd_cavalry.bin";
-const static std::string ssd_priorbox_path = "./lpr/lpr_priorbox_fp32.bin";
+const static std::string ssd_model_path = "/data/lpr/mobilenetv1_ssd_cavalry.bin";
+const static std::string ssd_priorbox_path = "/data/lpr/lpr_priorbox_fp32.bin";
 const static std::vector<std::string> ssd_input_name = {"data"};
 const static std::vector<std::string> ssd_output_name = {"mbox_loc", "mbox_conf_flatten"};
 
-const static std::string lpr_model_path = "./lpr/segfree_inception_cavalry.bin";
+const static std::string lpr_model_path = "/data/lpr/segfree_inception_cavalry.bin";
 const static std::vector<std::string> lpr_input_name = {"data"};
 const static std::vector<std::string> lpr_output_name = {"prob"};
 
-const static std::string lphm_model_path = "./lpr/LPHM_cavalry.bin";
+const static std::string lphm_model_path = "/data/lpr/LPHM_cavalry.bin";
 const static std::vector<std::string> lphm_input_name = {"data"};
 const static std::vector<std::string> lphm_output_name = {"dense"};
 
-const static std::string bg_point_cloud_file = "./bg.png";
-
 static float lpr_confidence = 0;
 static bbox_param_t lpr_bbox;
+static int width_diff = 0;
 static std::string lpr_result = "";
 
 volatile int has_lpr = 0;
@@ -398,6 +397,8 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 	uint32_t loop_count = 1;
 	uint32_t debug_en = G_param->debug_en;
 
+	bbox_param_t pre_lpr_bbox = {0};
+
 	do {
 		memset(&LPR_ctx, 0, sizeof(LPR_ctx));
 		memset(&draw_plate_list, 0, sizeof(draw_plate_list));
@@ -427,10 +428,14 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 				if(license_result.license_num > 0)
 				{
 					pthread_mutex_lock(&result_mutex);
+					float width1 = bbox_param[0].norm_max_x - bbox_param[0].norm_min_x;
+					float width2 = pre_lpr_bbox.norm_max_x - pre_lpr_bbox.norm_min_x;
+					width_diff = static_cast<int>(abs(width1 - width2));
 					lpr_bbox.norm_min_x = bbox_param[0].norm_min_x;
 					lpr_bbox.norm_min_y = bbox_param[0].norm_min_y;
 					lpr_bbox.norm_max_x = bbox_param[0].norm_max_x;
 					lpr_bbox.norm_max_y = bbox_param[0].norm_max_y;
+					pre_lpr_bbox = bbox_param[0];
 					if (license_result.license_info[0].conf > G_param->recg_threshold && \
 						strlen(license_result.license_info[0].text) == CHINESE_LICENSE_STR_LEN && \
 						license_result.license_info[0].conf > lpr_confidence)
@@ -910,6 +915,7 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 {
 	uint64_t debug_time = 0;
 	uint32_t debug_en = G_param->debug_en;
+	int send_count = 0;
 	int bg_point_count = 0;
 	// int is_in = -1;
 	unsigned long long int process_number = 0;
@@ -991,10 +997,6 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 				//int final_result = get_in_out(result_list);
 				int point_count = compute_depth_map(bg_map, filter_map);
 				std::cout << "final point_count:" << point_count << " " << final_result << std::endl;
-				// if(lpr_confidence > 0 && final_result == -1 && point_count >= 500)
-				// {
-				// 	final_result = 0;
-				// }
 				if(final_result == 0 && point_count >= 500)
 				{
 					final_result = 0;
@@ -1009,6 +1011,11 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 				}
 				std::cout << "final_result:" << final_result << std::endl;
 				pthread_mutex_lock(&result_mutex);
+				std::cout << "width_diff:" << width_diff << std::endl;
+				if(send_count == 1 && final_result == 0 && width_diff < 10)
+				{
+					final_result = -1;
+				}
 				if(final_result >= 0)
 				{
 					if(lpr_result != "" && lpr_confidence > 0)
@@ -1020,6 +1027,7 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 						sendto(*udp_socket_fd, send_result.str().c_str(), strlen(send_result.str().c_str()), \
 							0, (struct sockaddr *)&dest_addr,sizeof(dest_addr));
 						std::cout << send_result.str() << std::endl;
+						send_count = 1;
 						lpr_confidence = 0;
 					}
 					else if(final_result == 1 && lpr_result != "")
@@ -1033,6 +1041,10 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 						std::cout << send_result.str() << std::endl;
 						lpr_result = "";
 						lpr_confidence = 0;
+					}
+					if(final_result == 1)
+					{
+						send_count = 0;
 					}
 				}
 				pthread_mutex_unlock(&result_mutex);
