@@ -960,7 +960,7 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 		TIME_MEASURE_START(debug_en);
 		bgs->process(filter_map, img_output, img_bgmodel);
 		bg_point_count = static_cast<int>(cv::sum(img_output / 255)[0]);
-		std::cout << "bg_point_count:" << bg_point_count << std::endl;
+		// std::cout << "bg_point_count:" << bg_point_count << std::endl;
 		TIME_MEASURE_END("[point_cloud] bgs cost time", debug_en);
 
 		// if(process_number % 1 == 0)
