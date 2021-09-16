@@ -10,8 +10,8 @@
 
 //#define TEST_R01TH
 //#define TEST_I05C
-//#define TEST_I05M
-#define TEST_I08C
+#define TEST_I05M
+//#define TEST_I08C
 //#define TOFPROCESS
 
 //#define TEST_VIDEO
@@ -118,6 +118,8 @@ void camera_infer()
 	HDMIDevice hdmi;
 	hdmi.HDMIInit();
 
+    std::cout << "HDMI init success" << std::endl;
+
     signal(SIGINT, sig_int_handler);
     signal(SIGTERM, sig_int_handler);
     signal(SIGKILL, sig_int_handler);
@@ -133,7 +135,9 @@ void camera_infer()
             break;
         }
 #else
+        // std::cout << "grap capture" << std::endl;
 		src_image = cam.grabImage();
+        // std::cout << "image size:" << src_image.channels() << std::endl;
 #endif
         time_end = get_current_time();
 		double dt_grab = (time_end - time_start) / 1000.0;

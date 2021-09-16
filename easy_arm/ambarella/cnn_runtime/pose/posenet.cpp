@@ -57,7 +57,16 @@ std::vector<std::vector<cv::Point>> PoseNet::run(const cv::Mat &srcImage)
     cv::Size srcSize = cv::Size(srcImage.cols, srcImage.rows);
     cv::Size inputSize = get_input_size(&nnctrl_ctx);
     float *tempOutput[1] = {NULL};
-    preprocess(&nnctrl_ctx, srcImage, 0);
+    cv::Mat bgrImage;
+    if(srcImage.channels() == 1)
+    {
+        cv::cvtColor(srcImage, bgrImage, cv::COLOR_GRAY2BGR);
+    }
+    else
+    {
+        bgrImage = srcImage;
+    }
+    preprocess(&nnctrl_ctx, bgrImage, 0);
     cnn_run(&nnctrl_ctx, tempOutput, 1);
     int output_c = nnctrl_ctx.net.net_out.out_desc[0].dim.depth;
     int output_h = nnctrl_ctx.net.net_out.out_desc[0].dim.height;
