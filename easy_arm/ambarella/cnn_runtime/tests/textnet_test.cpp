@@ -47,7 +47,7 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
     std::string line_data;
     cv::Mat src_img;
     TextNet textnet_process;
-    if(textnet_process.init(model_path, input_name, output_name) < 0){
+    if(textnet_process.init(model_path, input_name, output_name, 0.5f) < 0){
         std::cout << "TextNet init fail!" << std::endl;
         return;
     }
@@ -72,7 +72,7 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
         time_start = get_current_time();
         result = textnet_process.run(src_img);
         time_end = get_current_time();
-        std::cout << "classnet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
+        std::cout << "textnet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
 
         save_result << image_name << "|" << result << "\n";
     }

@@ -99,6 +99,10 @@ std::vector<std::vector<cv::Point>> PoseNet::run(const cv::Mat &srcImage)
 
 int PoseNet::show(cv::Mat &image, const std::vector<std::vector<cv::Point>> &result)
 {
+    if(image.channels() == 1)
+    {
+        cv::cvtColor(image, image, cv::COLOR_GRAY2BGR);
+    }
     for(size_t i = 0; i < nPoints;++i){
         for(size_t j = 0; j < result.size(); ++j){
             const cv::Point& kp = result[j][i];
@@ -120,6 +124,7 @@ int PoseNet::show(cv::Mat &image, const std::vector<std::vector<cv::Point>> &res
             cv::line(image, kpA, kpB, colors[i], 10, cv::LINE_AA);
         }
     }
+    return 0;
 }
 
 std::vector<std::vector<cv::Point>> PoseNet::postprocess(const cv::Size src_size, const cv::Size dst_size, \
