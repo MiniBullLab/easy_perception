@@ -12,6 +12,8 @@ cv::Mat reshape_embedding(const float *output,
                           const int out_height, \
                           const int out_width);
 
+cv::Mat knn_process(const cv::Mat &embedding_train, const cv::Mat &embedding_test);
+
 
 
 #endif // POESNET_POSTPORCESS_H

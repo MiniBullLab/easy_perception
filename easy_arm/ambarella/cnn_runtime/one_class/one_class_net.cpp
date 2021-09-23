@@ -81,19 +81,7 @@ float OneClassNet::postprocess(const float *output,
     int out_width = nnctrl_ctx.net.net_out.out_desc[0].dim.width;
     cv::Mat embedding_train = train_embedding_process(embedding_file, out_channel);
     cv::Mat embedding_test = reshape_embedding(output, out_channel, out_height, out_width);
-
-    //----------------------------knn---------------------------
-    const int K(KNEIGHBOURS);
-    cv::Ptr<cv::ml::KNearest> knn = cv::ml::KNearest::create();
-    knn->setDefaultK(K);
-    knn->setAlgorithmType(cv::ml::KNearest::BRUTE_FORCE);
-    cv::Mat labels(embedding_train.rows, 1, CV_32FC1, cv::Scalar(0.0));
-
-    knn->train(embedding_train, cv::ml::ROW_SAMPLE, labels);
-
-    cv::Mat result, neighborResponses, distances_mat;
-    knn->findNearest(embedding_test, K, result, neighborResponses, distances_mat);
-
+    cv::Mat distances_mat = knn_process(embedding_train, embedding_test);
     int distanceMatWidth = distances_mat.size[0];
     int distanceMatHeight = distances_mat.size[1];
     // std::cout << "result: " << distances_mat.size[0] << " " << distances_mat.size[1] << std::endl;

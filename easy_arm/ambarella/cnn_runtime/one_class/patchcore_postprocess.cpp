@@ -1,5 +1,7 @@
 #include "patchcore_postprocess.h"
 
+#define KNEIGHBOURS (9)
+
 cv::Mat train_embedding_process(const std::string &embedding_file,
                                 const int output_channel)
 {
@@ -38,4 +40,19 @@ cv::Mat reshape_embedding(const float *output,
         }
     }
     return embedding_test;
+}
+
+cv::Mat knn_process(const cv::Mat &embedding_train, const cv::Mat &embedding_test)
+{
+    cv::Mat result, neighborResponses, distances_mat;
+    cv::Ptr<cv::ml::KNearest> knn = cv::ml::KNearest::create();
+    knn->setDefaultK(KNEIGHBOURS);
+    knn->setAlgorithmType(cv::ml::KNearest::BRUTE_FORCE);
+    cv::Mat labels(embedding_train.rows, 1, CV_32FC1, cv::Scalar(0.0));
+
+    knn->train(embedding_train, cv::ml::ROW_SAMPLE, labels);
+
+    knn->findNearest(embedding_test, KNEIGHBOURS, result, neighborResponses, distances_mat);
+    
+    return distances_mat;
 }

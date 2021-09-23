@@ -104,7 +104,7 @@ void preprocess(nnctrl_ctx_t *nnctrl_ctx, const cv::Mat &src_mat, const int resi
     }
     cv::Size dst_size = get_input_size(nnctrl_ctx);
     int width = nnctrl_ctx->net.net_in.in_desc[0].dim.width;
-    int pitch = LAYER_P(width);
+    int pitch = get_input_pitch(nnctrl_ctx) / 1;
     cv::Mat dst_mat;
     std::vector<cv::Mat> channel_s;
     if(resize_type == 0){

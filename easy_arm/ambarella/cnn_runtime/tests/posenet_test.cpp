@@ -10,8 +10,8 @@
 
 //#define TEST_R01TH
 //#define TEST_I05C
-#define TEST_I05M
-//#define TEST_I08C
+//#define TEST_I05M
+#define TEST_I08C
 //#define TOFPROCESS
 
 //#define TEST_VIDEO
