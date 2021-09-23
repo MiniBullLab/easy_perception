@@ -38,6 +38,9 @@ link_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/libpng/usr/lib)
 link_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/zlib/usr/lib)
 link_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/freetype/usr/lib)
 
+include_directories(${AMBARELLA_DIR}/prebuild/ambarella/library/ai_cam/cvlib/include)
+link_directories(${AMBARELLA_DIR}/prebuild/ambarella/library/ai_cam/cvlib/lib/armv8-a)
+
 #opencv
 #set(OpenCV_DIR ${AMBARELLA_DIR}/prebuild/third-party/armv8-a/opencv4/usr/lib/OpenCV)
 #find_package(OpenCV REQUIRED CONFIG)
