@@ -6,7 +6,7 @@
 #include "cnn_runtime/det2d/denet.h"
 
 const static std::string model_path = "./denet.bin";
-const static std::vector<std::string> input_name = {"det_input"};
+const static std::vector<std::string> input_name = {"data"};
 const static std::vector<std::string> output_name = {"det_output0", "det_output1", "det_output2"};
 const char* class_name[4] = {"pear", "apple", "orange", "potato"};
 
