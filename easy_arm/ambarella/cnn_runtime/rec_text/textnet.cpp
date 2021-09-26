@@ -67,10 +67,10 @@ std::string TextNet::run(const cv::Mat &srcImage)
     int pre_max_index = 0;
     int max_index = 0;
     float *tempOutput[1] = {NULL};
-    cv::Mat filterMat;
-    cv::medianBlur(srcImage, filterMat, 5);
+    // cv::Mat filterMat;
+    // cv::medianBlur(srcImage, filterMat, 5);
     // cv::bilateralFilter(srcImage, filterMat, 10, 10 * 2, 10 / 2);
-    preprocess(&nnctrl_ctx, filterMat, 2);
+    preprocess(&nnctrl_ctx, srcImage, 2);
     cnn_run(&nnctrl_ctx, tempOutput, 1);
     int output_c = nnctrl_ctx.net.net_out.out_desc[0].dim.depth;
     int output_h = nnctrl_ctx.net.net_out.out_desc[0].dim.height;
