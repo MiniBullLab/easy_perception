@@ -13,6 +13,7 @@ static void image_dir_infer(const std::string &image_dir){
     unsigned long time_start, time_end;
     std::vector<std::string> images;
     std::ofstream save_result;
+    int result = -1;
     float score = 0.0;
     cv::Mat src_img;
     OneClassNet oneClassNet_process;
@@ -30,7 +31,7 @@ static void image_dir_infer(const std::string &image_dir){
 		std::cout << temp_str.str() << std::endl;
 		src_img = cv::imread(temp_str.str());
         time_start = get_current_time();
-        score = oneClassNet_process.run(src_img, embedding_file);
+        result = oneClassNet_process.run(src_img, embedding_file, &score);
         time_end = get_current_time();
         std::cout << "OneClassNet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
 
@@ -43,6 +44,7 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
     unsigned long time_start, time_end;
     std::ofstream save_result;
     std::ifstream read_txt;
+    int result = -1;
     float score = 0.0;
     std::string line_data;
     cv::Mat src_img;
@@ -71,7 +73,7 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
         std::cout << image_path.str() << std::endl;
         src_img = cv::imread(image_path.str());
         time_start = get_current_time();
-        score = oneClassNet_process.run(src_img, embedding_file);
+        result = oneClassNet_process.run(src_img, embedding_file, &score);
         time_end = get_current_time();
         std::cout << "OneClassNet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
 

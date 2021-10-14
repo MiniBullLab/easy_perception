@@ -45,9 +45,9 @@ int OneClassNet::init(const std::string &modelPath, const std::string &inputName
     return rval;
 }
 
-float OneClassNet::run(const cv::Mat &srcImage, const std::string &embedding_file)
+int OneClassNet::run(const cv::Mat &srcImage, const std::string &embedding_file, float *score)
 {
-    float result = 0.0;
+    int result = -1;
     float *tempOutput[1] = {NULL};
     preprocess(&nnctrl_ctx, srcImage, 0);
     cnn_run(&nnctrl_ctx, tempOutput, 1);
@@ -68,7 +68,13 @@ float OneClassNet::run(const cv::Mat &srcImage, const std::string &embedding_fil
         }
     }
 
-    result = postprocess(oneClassOutput, embedding_file);
+    *score = postprocess(oneClassOutput, embedding_file);
+    if(*score > this->threshold) {
+        result = 1;
+    }
+    else {
+        result = 0;
+    }
     std::cout << "result: " << result << std::endl;
     return result;
 }

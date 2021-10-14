@@ -157,12 +157,15 @@ std::vector<std::vector<cv::Point>> PoseNet::postprocess(const cv::Size src_size
             if(tempResult[n][p].probability < 0)
             {
                 keypoints.push_back(cv::Point(-1, -1));
+                // std::cout << "pose point: -1, -1" << std::endl;
             }
             else
             {
                 keypoints.push_back(cv::Point(x, y));
+                // std::cout << "pose point:" << x << " " << y << std::endl;
             }
         }
+        // std::cout << "pose count:" << keypoints.size() << std::endl;
         result.push_back(keypoints);
     }
     return result;
