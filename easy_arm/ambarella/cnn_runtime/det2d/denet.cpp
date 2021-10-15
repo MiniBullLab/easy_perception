@@ -22,7 +22,7 @@ DeNet::~DeNet()
 }
 
 int DeNet::init(const std::string &modelPath, const std::vector<std::string> &inputName, 
-                const std::vector<std::string> &outputName, const float threshold)
+             const std::vector<std::string> &outputName, const int classNumber, const float threshold)
 {
     int rval = 0;
     int inputCount = static_cast<int>(inputName.size());
@@ -41,6 +41,7 @@ int DeNet::init(const std::string &modelPath, const std::vector<std::string> &in
                        (const char**)inNames, inputCount, \
                        (const char**)outNames, outputCount);
     rval = cnn_init(&nnctrl_ctx, &cavalry_ctx);
+    this->classNumber = classNumber;
     this->threshold = threshold;
     
     for(size_t i = 0; i < inputName.size(); i++){
@@ -87,7 +88,7 @@ std::vector<std::vector<float>> DeNet::postprocess(const cv::Size src_size, cons
     cv::Size pad_size;
 
     std::vector<std::vector<float>> final_results;
-	final_results = yolo_run(output[0], output[1], output[2]);
+	final_results = yolo_run(this->classNumber, output[0], output[1], output[2]);
 
     get_square_size(src_size, dst_size, ratio, pad_size);
 
