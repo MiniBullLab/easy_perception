@@ -86,7 +86,7 @@ cv::Mat TextNet::cropImageROI(const cv::Mat &srcImage, const std::vector<cv::Poi
     cv::Mat result = cv::Mat::zeros(cv::Size(width, height), CV_8UC3);
     cv::warpPerspective(srcImage, result, M, result.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT, borderValue);
     std::cout << "width:" << result.cols << " height:" << result.rows << std::endl;
-    if(result.rows * 1.0f / result.cols >= 2.0f)
+    if((result.rows * 1.0f / result.cols) >= 2.0f)
     {
         // cv::Point2f center;
         // center.x = float(result.cols / 2.0);
@@ -96,7 +96,7 @@ cv::Mat TextNet::cropImageROI(const cv::Mat &srcImage, const std::vector<cv::Poi
         // cv::warpAffine(src, src_rotate, M, Size(length, length), 1, 0, Scalar(0, 0, 0));
         cv::Mat temp;
         cv::transpose(result, temp);
-        flip(temp, result, 0);
+        cv::flip(temp, result, 0);
     }
     return result;
 }
