@@ -170,10 +170,10 @@ void camera_infer()
 int main()
 {
     std::cout << "start..." << std::endl;
-    // const std::string image_dir = "./pose_img/";
-    // const std::string image_txt_path = "img.txt";
-    // image_txt_infer(image_dir, image_txt_path);
-    camera_infer();
+    const std::string image_dir = "./images/";
+    const std::string image_txt_path = "img.txt";
+    image_txt_infer(image_dir, image_txt_path);
+    // camera_infer();
     std::cout << "End of game!!!" << std::endl;
     return 0;
 }
