@@ -94,7 +94,8 @@ std::vector<std::vector<cv::Point>> PoseNet::run(const cv::Mat &srcImage)
     return result;
 }
 
-int PoseNet::show(cv::Mat &image, const std::vector<std::vector<cv::Point>> &result)
+int PoseNet::show(cv::Mat &image, const std::vector<std::vector<cv::Point>> &result,
+                         const int pointSize, const int lineWidth)
 {
     if(image.channels() == 1)
     {
@@ -106,7 +107,7 @@ int PoseNet::show(cv::Mat &image, const std::vector<std::vector<cv::Point>> &res
             if(kp.x < 0 || kp.y < 0){
                     continue;
             }
-            cv::circle(image, kp, 20, colors[i], -1, cv::LINE_AA);
+            cv::circle(image, kp, pointSize, colors[i], -1, cv::LINE_AA);
         }
     }
 
@@ -118,7 +119,7 @@ int PoseNet::show(cv::Mat &image, const std::vector<std::vector<cv::Point>> &res
             if(kpA.x < 0 || kpA.y < 0 || kpB.x < 0 || kpB.y < 0){
                 continue;
             }
-            cv::line(image, kpA, kpB, colors[i], 10, cv::LINE_AA);
+            cv::line(image, kpA, kpB, colors[i], lineWidth, cv::LINE_AA);
         }
     }
     return 0;
