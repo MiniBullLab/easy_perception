@@ -31,8 +31,12 @@ easy_arm
 4. 进入在workspace镜像中
 5. cd /easy_data/easy_perception/easy_arm/ambarella
 6. ./amba_build.sh aarch64
-7. 运行先需要运行
-    ```
-    modprobe cavalry && /usr/local/bin/cavalry_load -f /lib/firmware/cavalry.bin -r
-    ```
-    然后运行相应的应用程序
+7. 运行环境平台安霸SDK2.0
+7. 运行
+   * 将生成的libcnn_runtime.so与third_party目录下的动态库拷贝到安霸平台上
+   * 设置动态库的环境变量
+   * 
+        ```
+        modprobe cavalry && /usr/local/bin/cavalry_load -f /lib/firmware/cavalry.bin -r
+        ```
+   * 运行相应的应用程序
