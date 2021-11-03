@@ -10,7 +10,6 @@
 #include <time.h>
 #include <signal.h>
 #include <stdint.h>
-#include <pthread.h>
 #include <semaphore.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -36,6 +35,9 @@
 #include "cnn_lpr/tof/vibebgs.h"
 
 #include "utility/utils.h"
+
+#include "glog/logging.h"   // glog 头文件
+#include "glog/raw_logging.h"
 
 #define FILENAME_LENGTH				(256)
 #define MAX_NET_NUM					(16)
@@ -561,24 +563,6 @@ static void deinit_ssd(SSD_ctx_t *SSD_ctx)
 	EA_LOG_NOTICE("deinit_ssd\n");
 }
 
-static int led_process(const cv::Mat &bgr)
-{
-	cv::Mat gray;
-	cv::cvtColor(bgr, gray, CV_BGR2GRAY);
-	//std::cout << "image size:" << gray.cols << " " << gray.rows << std::endl;
-	cv::Scalar left_mean = cv::mean(gray(cv::Rect(0, 0, 300, 300)));  
-	cv::Scalar right_mean = cv::mean(gray(cv::Rect(gray.cols-1-300, 0, 300, 300)));
-	//std::cout << "left:" << left_mean.val[0] << " right:" << right_mean.val[0] << std::endl;
-	if(left_mean.val[0] < 50 && right_mean.val[0] < 50)
-	{
-		return 1;
-	}
-	else
-	{
-		return 0;
-	} 
-}
-
 static void *run_ssd_pthread(void *ssd_thread_params)
 {
 	int rval = 0;
@@ -612,13 +596,6 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 	// // cv::VideoWriter output_video;
 	// struct timeval tv;  
     // char time_str[64];
-
-	int is_night = 0;
-	int led_device = open("/sys/devices/platform/e4000000.n_apb/e4008000.i2c/i2c-0/0-0064/leds/lm36011:torch/brightness", O_RDWR, 0);
-	if (led_device < 0) {
-		printf("open led fail\n");
-        return NULL;
-	}
 
 	do {
 		memset(&ssd_net_result, 0, sizeof(ssd_net_result));
@@ -656,22 +633,6 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 				TIME_MEASURE_START(debug_en);
 				RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
 				TIME_MEASURE_END("[SSD] yuv to bgr time", debug_en);
-
-				if(led_device > 0)
-				{
-					TIME_MEASURE_START(debug_en);
-					is_night = led_process(bgr);
-					if(is_night > 0)
-					{
-						// std::cout << "is_night:" << is_night << std::endl;
-						write(led_device, "20", sizeof(char));
-					}
-					else
-					{
-						write(led_device, "0", sizeof(char));
-					}
-					TIME_MEASURE_END("[SSD] led time", debug_en);
-				}
 
 				TIME_MEASURE_START(debug_en);
 				RVAL_OK(ea_cvt_color_resize(img_tensor, SSD_ctx.net_input.tensor,
@@ -767,7 +728,6 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 			// 	output_video.release();
 			// 	first_save = true;
 			// }
-			write(led_device, "0", sizeof(char));
 			has_lpr = 0;
 			usleep(20000);
 			// bbox_list.bbox_num = 0;
@@ -784,14 +744,6 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 		free_single_state_buffer(ssd_mid_buf);
 		printf("SSD thread quit.\n");
 	} while (0);
-
-	if(led_device >= 0)
-    {
-		write(led_device, "0", sizeof(char));
-        close(led_device);
-		led_device = -1;
-		printf("close led\n");
-    }
 
 	// if(output_video.isOpened())
     // {
@@ -1068,76 +1020,9 @@ static void point_cloud_process(const global_control_param_t *G_param, const int
 	std::cout << "stop point cloud process" << std::endl;
 }
 
-static void* upd_broadcast_send(void* save_data)
-{
-	int rval = 0;
-	int broadcast_port = 8888;
-	int on = 1; //开启
-	struct sockaddr_in broadcast_addr = {0};
-	char buf[1024] = "LPR Runing!";
-	int broadcast_socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
-	if (broadcast_socket_fd == -1)
-    {
-        printf("create socket failed ! error message :%s\n", strerror(errno));
-        return NULL;
-    }
-	//开启发送广播数据功能
-	rval = setsockopt(broadcast_socket_fd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
-	if(rval < 0)
-	{
-		perror("setsockopt fail\n");
-		return NULL;
-	}
-	//设置当前网段的广播地址 
-    broadcast_addr.sin_family = AF_INET;
-    broadcast_addr.sin_port = htons(broadcast_port);
-    broadcast_addr.sin_addr.s_addr = inet_addr("10.0.0.255");  //设置为广播地址
-	while(run_flag > 0)
-	{
-		std::cout << "heart loop!" << std::endl;
-		sendto(broadcast_socket_fd, buf, strlen(buf), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)); 
-		sleep(1);
-	}
-	strcpy(buf, "LPR Stop!");
-	sendto(broadcast_socket_fd, buf, strlen(buf), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)); 
-	close(broadcast_socket_fd);
-	std::cout << "upd broadcast thread quit" << std::endl;
-	return NULL;
-}
-
-static void * upd_recv_msg(void *arg)
-{
-	int ret = 0;
-	int *socket_fd = (int *)arg;//通信的socket
-	struct sockaddr_in  src_addr = {0};  //用来存放对方(信息的发送方)的IP地址信息
-	int len = sizeof(src_addr);	//地址信息的大小
-	char msg[1024] = {0};//消息缓冲区
-	while(run_flag > 0)
-	{
-		ret = recvfrom(*socket_fd, msg, sizeof(msg), 0, (struct sockaddr *)&src_addr, (socklen_t*)len);
-		if(ret > 0)
-		{
-			printf("[%s:%d]",inet_ntoa(src_addr.sin_addr),ntohs(src_addr.sin_port));
-			printf("msg=%s\n",msg);
-			if(strcmp(msg, "exit") == 0 || strcmp(msg, "") == 0)
-			{
-				run_flag = 0;
-				break;
-			}
-			memset(msg, 0, sizeof(msg));//清空存留消息	
-		}
-	}
-	//关闭通信socket
-	close(*socket_fd);
-	std::cout << "upd recv msg thread quit" << std::endl;
-	return NULL;
-}
-
 static int start_all_lpr(global_control_param_t *G_param)
 {
 	int rval = 0;
-	//pthread_t heart_pthread_id = 0;
-	pthread_t pc_recv_thread_id = 0;
 	// pthread_t save_pthread_id = 0;
 	pthread_t ssd_pthread_id = 0;
 	pthread_t lpr_pthread_id = 0;
@@ -1219,10 +1104,6 @@ static int start_all_lpr(global_control_param_t *G_param)
 		RVAL_ASSERT(rval == 0);
 		// rval = pthread_create(&save_pthread_id, NULL, save_video_pthread, NULL);
 		// RVAL_ASSERT(rval == 0);
-		rval = pthread_create(&pc_recv_thread_id, NULL, upd_recv_msg, (void*)&udp_socket_fd);
-		RVAL_ASSERT(rval == 0);
-		// rval = pthread_create(&heart_pthread_id, NULL, upd_broadcast_send, NULL);
-		// RVAL_ASSERT(rval == 0);
 	} while (0);
 	std::cout << "start_ssd_lpr success" << std::endl;
 
@@ -1237,12 +1118,6 @@ static int start_all_lpr(global_control_param_t *G_param)
 	}
 	// if (save_pthread_id > 0) {
 	// 	pthread_join(save_pthread_id, NULL);
-	// }
-	if (pc_recv_thread_id > 0) {
-		pthread_join(pc_recv_thread_id, NULL);
-	}
-	// if (heart_pthread_id > 0) {
-	// 	pthread_join(heart_pthread_id, NULL);
 	// }
 	pthread_mutex_destroy(&result_mutex);
 	pthread_mutex_destroy(&ssd_mutex);
@@ -1260,7 +1135,7 @@ static void sigstop(int signal_number)
 	tof_geter.stop();
 	// pthread_cond_signal(&image_buffer.notfull);
 	// pthread_cond_signal(&image_buffer.notempty);
-	printf("sigstop msg, exit live mode\n");
+	LOG(INFO) << "sigstop msg, exit";
 	return;
 }
 
@@ -1303,10 +1178,35 @@ static void env_deinit(global_control_param_t *G_param)
 	ea_env_close();
 }
 
+void SignalHandle(const char* data, int size) {
+    std::string str = data;
+	run_lpr = 0;
+	run_flag = 0;
+	tof_geter.stop();
+    LOG(ERROR) << str;
+}
+
 int main(int argc, char **argv)
 {
 	int rval = 0;
 	global_control_param_t G_param;
+
+	google::InitGoogleLogging(argv[0]);
+
+	google::SetLogDestination(google::INFO, "/data/glogfile/loginfo");   
+	google::SetLogDestination(google::WARNING, "/data/glogfile/logwarn");   
+	google::SetLogDestination(google::GLOG_ERROR, "/data/glogfile/logerror");
+	google::InstallFailureSignalHandler();
+	google::InstallFailureWriter(&SignalHandle); 
+
+	FLAGS_colorlogtostderr = true; 
+	FLAGS_logbufsecs = 30;    //缓存的最大时长，超时会写入文件
+	FLAGS_max_log_size = 10; //单个日志文件最大，单位M
+	FLAGS_logtostderr = false; //设置为true，就不会写日志文件了
+	// FLAGS_alsologtostderr = true;
+	FLAGS_minloglevel = 0;
+	FLAGS_stderrthreshold = 1;
+	FLAGS_stop_logging_if_full_disk = true;
 
 	signal(SIGINT, sigstop);
 	signal(SIGQUIT, sigstop);
@@ -1320,7 +1220,8 @@ int main(int argc, char **argv)
 		}while(0);
 		env_deinit(&G_param);
 	}
-	printf("All Quit.\n");
+	LOG(INFO) << "All Quit";
+	google::ShutdownGoogleLogging();
 	return rval;
 }
 

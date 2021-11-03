@@ -72,6 +72,14 @@ link_directories(${AMBARELLA_DIR}/prebuild/ambarella/library/ai_cam/cvlib/lib/ar
 include_directories(${AMBARELLA_DIR}/prebuild/oss/armv8-a/opencv/include)
 link_directories(${AMBARELLA_DIR}/prebuild/oss/armv8-a/opencv/usr/lib)
 
+#gflags
+include_directories(${AMBARELLA_DIR}/prebuild/oss/armv8-a/gflags/include)
+link_directories(${AMBARELLA_DIR}/prebuild/oss/armv8-a/gflags/usr/lib)
+
+#glog
+include_directories(${AMBARELLA_DIR}/prebuild/oss/armv8-a/glog/include)
+link_directories(${AMBARELLA_DIR}/prebuild/oss/armv8-a/glog/usr/lib)
+
 OPTION(USE_OpenMP "Use OpenMP" ON)
 IF(USE_OpenMP)
    FIND_PACKAGE(OpenMP)

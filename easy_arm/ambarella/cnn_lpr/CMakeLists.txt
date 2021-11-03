@@ -13,6 +13,8 @@ file(GLOB UTILITY_SRCS
 
 #collect source files
 file(GLOB LPR_SRCS
+    "${PROJECT_SOURCE_DIR}/led/*.cpp"
+    "${PROJECT_SOURCE_DIR}/net_process/*.cpp"
     "${PROJECT_SOURCE_DIR}/ssd/*.c"
     "${PROJECT_SOURCE_DIR}/lpr/*.cpp"
 	"${PROJECT_SOURCE_DIR}/lpr/*.c"
@@ -34,6 +36,8 @@ target_link_libraries(test_lpr
                       # opencv_calib3d
                       # opencv_objdetect
                       # protobuf
+                      gflags
+                      glog
                       tbb
                       jpeg
                       png
