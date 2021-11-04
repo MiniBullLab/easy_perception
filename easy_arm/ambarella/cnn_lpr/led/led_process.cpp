@@ -14,7 +14,7 @@ LEDProcess::~LEDProcess()
 		write(led_device, "0", sizeof(char));
         close(led_device);
 		led_device = -1;
-		printf("close led\n");
+		LOG(INFO) << "close led";
     }
 }
 
@@ -22,7 +22,7 @@ int LEDProcess::led_open()
 {
 	led_device = open("/sys/devices/platform/e4000000.n_apb/e4008000.i2c/i2c-0/0-0064/leds/lm36011:torch/brightness", O_RDWR, 0);
 	if (led_device < 0) {
-		printf("open led fail\n");
+		LOG(ERROR) << "open led fail";
         return -1;
 	}
 	return 0;

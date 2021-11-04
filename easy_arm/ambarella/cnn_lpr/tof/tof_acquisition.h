@@ -4,6 +4,9 @@
 #include <vector>
 #include <pthread.h>
 
+#include <glog/logging.h>
+#include <glog/raw_logging.h>
+
 //opencv
 #include <opencv2/core.hpp>
 

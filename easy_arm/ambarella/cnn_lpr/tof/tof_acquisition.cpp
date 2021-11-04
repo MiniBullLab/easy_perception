@@ -1318,13 +1318,13 @@ static void *run_tof_pthread(void* data)
 	p2dIO p2dio;
 
 	if (tof_decode_init(tof_ptr, win, &p2dio) < 0) {
-		printf("tof_decode_init fail!\n");
+		LOG(ERROR) << "tof_decode_init fail!";
         run_tof = 0;
 	}
 
 	init_amba_tof_ae_config(&tof_ae_cfg, &p2dio);
 	if (config_tof(win, &option, tof_ptr) < 0){
-		printf("config_tof fail!\n");
+		LOG(ERROR) << "config_tof fail!";
 		run_tof = 0;
 	}
 
@@ -1338,7 +1338,7 @@ static void *run_tof_pthread(void* data)
 		memset(&sensor, 0, sizeof(sensor));
 		if (get_4_raw_data(&sensor, win, &prev_pts0, &prev_pts4,
 			&repeat, p2dio.usingDualFreq() ? 1 : 0) < 0) {
-			printf("get_4_raw_data fail\n");
+			LOG(ERROR) << "get_4_raw_data fail";
             run_tof = 0;
 		}
 		if (repeat) {
@@ -1365,7 +1365,7 @@ static void *run_tof_pthread(void* data)
 	do {
 		run_tof = 0;
 		sigstop();
-		printf("TOF thread quit.\n");
+		LOG(WARNING) << "TOF thread quit.";
 	} while (0);
 
 	return NULL;
@@ -1400,15 +1400,15 @@ int TOFAcquisition::open_tof()
     {
         close(fd_iav);
 		fd_iav = -1;
-		printf("close /dev/iav\n");
+		LOG(WARNING) << "close /dev/iav";
     }
     fd_iav = open("/dev/iav", O_RDWR, 0);
 	if (fd_iav < 0) {
-		printf("open /dev/iav fail\n");
+		LOG(ERROR) << "open /dev/iav fail";
         return -1;
 	}
     if (map_buffers() < 0) {
-		printf("map_buffers error\n");
+		LOG(ERROR) << "map_buffers error";
         return -1;
 	}
 	pthread_mutex_init(&tof_buffer.lock, NULL);  
@@ -1416,7 +1416,7 @@ int TOFAcquisition::open_tof()
     pthread_cond_init(&tof_buffer.notfull, NULL);  
     tof_buffer.readpos = 0;  
     tof_buffer.writepos = 0;
-	printf("TOF init success\n");
+	LOG(INFO) << "TOF init success";
 	return 0;
 }
 
@@ -1438,7 +1438,7 @@ int TOFAcquisition::stop()
 	if (pthread_id > 0) {
 		pthread_join(pthread_id, NULL);
 	}
-	std::cout << "stop TOF success" << std::endl;
+	LOG(INFO) << "stop TOF success";
 	return ret;
 }
 
@@ -1521,7 +1521,7 @@ int TOFAcquisition::dump_ply(const char* save_path, const PointCloud &src_cloud)
 		fprintf(fptr, "%d %d %d\n", 255, 0, 0);
 	}
 	fclose(fptr);
-	std::cout << "save ply OK..." << std::endl;
+	LOG(INFO) << "save ply OK...";
 	return 0;
 }
 
@@ -1537,7 +1537,7 @@ int TOFAcquisition::dump_bin(const std::string &save_path, const PointCloud &src
 		out_file.write(reinterpret_cast<char*>(data), sizeof(data));
 	}
 	out_file.close();
-	std::cout << "save bin OK..." << std::endl;
+	LOG(INFO) << "save bin OK...";
 	return 0;
 }
 
@@ -1547,7 +1547,7 @@ int TOFAcquisition::read_bin(const std::string &file_path, PointCloud &result_cl
 	std::ifstream in_file(file_path, std::ios::in|std::ios::binary);
 	if(!in_file)
     {
-        std::cout << file_path << " open error!" << std::endl;
+		LOG(ERROR) << file_path << " open error!";
         return -1;
     }
 	result_cloud.clear();
@@ -1560,6 +1560,6 @@ int TOFAcquisition::read_bin(const std::string &file_path, PointCloud &result_cl
 		result_cloud.push_back(point);
 	}
 	in_file.close();
-	std::cout << "read bin OK..." << std::endl;
+	LOG(INFO) << "read bin OK...";
 	return 0;
 }
