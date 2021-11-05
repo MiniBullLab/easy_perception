@@ -6,12 +6,12 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 
-#include "tof_acquisition.h"
+#include "tof_316_acquisition.h"
 
 bool is_file_exists(const std::string& name);
 
-int filter_point_cloud( const cv::Mat &depth_map, TOFAcquisition::PointCloud &src_cloud);
-int compute_point_count(const TOFAcquisition::PointCloud &bg_cloud, TOFAcquisition::PointCloud &src_cloud);
+int filter_point_cloud( const cv::Mat &depth_map, TOF316Acquisition::PointCloud &src_cloud);
+int compute_point_count(const TOF316Acquisition::PointCloud &bg_cloud, TOF316Acquisition::PointCloud &src_cloud);
 
 void init_background(const std::string &bg_path, cv::Mat &bg_map);
 

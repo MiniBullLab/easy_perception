@@ -17,8 +17,6 @@ file(GLOB LPR_SRCS
     "${PROJECT_SOURCE_DIR}/image/*.cpp"
     "${PROJECT_SOURCE_DIR}/led/*.cpp"
     "${PROJECT_SOURCE_DIR}/net_process/*.cpp"
-    "${PROJECT_SOURCE_DIR}/ssd/*.cpp"
-    "${PROJECT_SOURCE_DIR}/ssd/*.c"
     "${PROJECT_SOURCE_DIR}/lpr/*.cpp"
 	"${PROJECT_SOURCE_DIR}/lpr/*.c"
     "${PROJECT_SOURCE_DIR}/lpr_third_party/FineMapping.cpp"

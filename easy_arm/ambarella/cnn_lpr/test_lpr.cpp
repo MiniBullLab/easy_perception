@@ -3,12 +3,13 @@
 #include <stdint.h>
 
 #include "cnn_lpr/common/common_process.h"
-#include "cnn_lpr/ssd/det_process.h"
+#include "cnn_lpr/lpr/det_process.h"
 #include "cnn_lpr/lpr/lpr_process.h"
 
-#include "cnn_lpr/tof/tof_acquisition.h"
+#include "cnn_lpr/tof/tof_316_acquisition.h"
 #include "cnn_lpr/tof/tof_data_process.h"
-#include "cnn_lpr/tof/vibebgs.h"
+
+#include "cnn_lpr/image/vibebgs.h"
 
 #include "cnn_lpr/net_process/net_process.h"
 
@@ -33,7 +34,7 @@ static pthread_mutex_t ssd_mutex;
 volatile int run_flag = 1;
 volatile int run_lpr = 0;
 
-static TOFAcquisition tof_geter;
+static TOF316Acquisition tof_geter;
 static NetProcess net_process;
 
 static void *run_lpr_pthread(void *lpr_param_thread)
@@ -109,7 +110,7 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 						{
 							lpr_result = license_result.license_info[0].text;
 							lpr_confidence = license_result.license_info[0].conf;
-							LOG(INFO) << "LPR:"  << lpr_result << " " << lpr_confidence;
+							LOG(WARNING) << "LPR:"  << lpr_result << " " << lpr_confidence;
 						}
 					pthread_mutex_unlock(&result_mutex);
 				}
@@ -124,7 +125,7 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 					float average_time1 = sum_time / (1000 * TIME_MEASURE_LOOPS);
 					float average_time2 = (average_license_num > 0.0f) ? (sum_time / (1000 * average_license_num)) : 0.0f;
 					LOG(INFO) << "[" << TIME_MEASURE_LOOPS  << "loops] LPR average time license_num " << " " << average_license_num / TIME_MEASURE_LOOPS;
-					LOG(INFO) << "average time:"<< average_time1 << "per license cost time:" << average_time2;
+					LOG(WARNING) << "average time:"<< average_time1 << " per license cost time:" << average_time2;
 					sum_time = 0;
 					loop_count = 1;
 					average_license_num = license_num;
@@ -267,7 +268,7 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 				sum_time += (gettimeus() - start_time);
 				++loop_count;
 				if (loop_count == TIME_MEASURE_LOOPS) {
-					LOG(INFO) << "SSD average time [per " << TIME_MEASURE_LOOPS << " loops]:" << sum_time / (1000 * TIME_MEASURE_LOOPS) << "ms";
+					LOG(WARNING) << "SSD average time [per " << TIME_MEASURE_LOOPS << " loops]:" << sum_time / (1000 * TIME_MEASURE_LOOPS) << "ms";
 					sum_time = 0;
 					loop_count = 1;
 				}
@@ -288,7 +289,7 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 		}
 		ssd_net_deinit(&SSD_ctx.ssd_net_ctx);
 		free_single_state_buffer(ssd_mid_buf);
-		LOG(INFO) << "SSD thread quit.";
+		LOG(WARNING) << "SSD thread quit.";
 	} while (0);
 
 	return NULL;
@@ -345,7 +346,7 @@ static void point_cloud_process(const global_control_param_t *G_param)
 	cv::Mat depth_map = cv::Mat::zeros(cv::Size(DEPTH_WIDTH, DEPTH_HEIGTH),CV_8UC1);
 	std::vector<int> result_list;
 	std::vector<int> point_cout_list;
-	TOFAcquisition::PointCloud src_cloud;
+	TOF316Acquisition::PointCloud src_cloud;
 
 	cv::Mat img_bgmodel;
 	cv::Mat img_output;
@@ -372,7 +373,7 @@ static void point_cloud_process(const global_control_param_t *G_param)
 		TIME_MEASURE_START(debug_en);
 		bgs->process(filter_map, img_output, img_bgmodel);
 		bg_point_count = static_cast<int>(cv::sum(img_output / 255)[0]);
-		LOG(INFO) << "bg_point_count:" << bg_point_count;
+		LOG(WARNING) << "bg_point_count:" << bg_point_count;
 		TIME_MEASURE_END("[point_cloud] bgs cost time", debug_en);
 
 		// if(process_number % 1 == 0)
@@ -408,7 +409,7 @@ static void point_cloud_process(const global_control_param_t *G_param)
 				int final_result = vote_in_out(point_cout_list);
 				//int final_result = get_in_out(result_list);
 				int point_count = compute_depth_map(bg_map, filter_map);
-				LOG(INFO) << "final point_count:" << point_count << " " << final_result;
+				LOG(WARNING) << "final point_count:" << point_count << " " << final_result;
 				if(final_result == 0 && point_count >= 500)
 				{
 					final_result = 0;
@@ -530,7 +531,7 @@ static int start_all_lpr(global_control_param_t *G_param)
 	}
 	pthread_mutex_destroy(&result_mutex);
 	pthread_mutex_destroy(&ssd_mutex);
-	LOG(INFO) << "Main thread quit";
+	LOG(WARNING) << "Main thread quit";
 	return rval;
 }
 
@@ -548,7 +549,7 @@ void SignalHandle(const char* data, int size) {
 	run_lpr = 0;
 	run_flag = 0;
 	tof_geter.stop();
-    LOG(ERROR) << str;
+    LOG(FATAL) << str;
 }
 
 int main(int argc, char **argv)
@@ -558,19 +559,18 @@ int main(int argc, char **argv)
 
 	google::InitGoogleLogging(argv[0]);
 
-	google::SetLogDestination(google::INFO, "/data/glogfile/loginfo");   
-	google::SetLogDestination(google::WARNING, "/data/glogfile/logwarn");   
-	google::SetLogDestination(google::GLOG_ERROR, "/data/glogfile/logerror");
+	FLAGS_log_dir = "/data/glogfile";
+	// google::SetLogDestination(google::GLOG_ERROR, "/data/glogfile/logerror");
 	google::InstallFailureSignalHandler();
 	google::InstallFailureWriter(&SignalHandle); 
 
+	FLAGS_stderrthreshold = 1;
 	FLAGS_colorlogtostderr = true; 
 	FLAGS_logbufsecs = 20;    //缓存的最大时长，超时会写入文件
 	FLAGS_max_log_size = 10; //单个日志文件最大，单位M
 	FLAGS_logtostderr = false; //设置为true，就不会写日志文件了
 	// FLAGS_alsologtostderr = true;
 	FLAGS_minloglevel = 0;
-	FLAGS_stderrthreshold = 1;
 	FLAGS_stop_logging_if_full_disk = true;
 
 	signal(SIGINT, sigstop);

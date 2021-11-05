@@ -132,6 +132,6 @@ int NetProcess::send_result(const std::string &lpr_result, const int code)
 	send_result << time_str << "|" << code << "|" << lpr_result;
 	sendto(udp_socket_fd, send_result.str().c_str(), strlen(send_result.str().c_str()), \
 		0, (struct sockaddr *)&dest_addr,sizeof(dest_addr));
-	LOG(INFO) << send_result.str();
+	LOG(WARNING) << send_result.str().c_str();
 	return 0;
 }

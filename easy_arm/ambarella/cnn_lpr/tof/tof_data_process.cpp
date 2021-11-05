@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <iostream>
 #include <fstream>
-#include "tof_acquisition.h"
 
 bool is_file_exists(const std::string& name) 
 {
@@ -11,7 +10,7 @@ bool is_file_exists(const std::string& name)
     return f.good();
 }
 
-int filter_point_cloud( const cv::Mat &depth_map, TOFAcquisition::PointCloud &src_cloud)
+int filter_point_cloud( const cv::Mat &depth_map, TOF316Acquisition::PointCloud &src_cloud)
 {
 	const uchar* data = depth_map.ptr<uchar>(0);
 	for (auto it = src_cloud.begin(); it != src_cloud.end();)
@@ -28,7 +27,7 @@ int filter_point_cloud( const cv::Mat &depth_map, TOFAcquisition::PointCloud &sr
     }
 }
 
-int compute_point_count(const TOFAcquisition::PointCloud &bg_cloud, TOFAcquisition::PointCloud &src_cloud)
+int compute_point_count(const TOF316Acquisition::PointCloud &bg_cloud, TOF316Acquisition::PointCloud &src_cloud)
 {
 	int result = 0;
 	float min_dist = 1000;

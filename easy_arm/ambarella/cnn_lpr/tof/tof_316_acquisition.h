@@ -10,7 +10,7 @@
 //opencv
 #include <opencv2/core.hpp>
 
-class TOFAcquisition
+class TOF316Acquisition
 {
 public:
     struct Point
@@ -22,8 +22,8 @@ public:
     };
     typedef std::vector<Point> PointCloud;
 
-    TOFAcquisition();
-    ~TOFAcquisition();
+    TOF316Acquisition();
+    ~TOF316Acquisition();
 
     int open_tof();
 

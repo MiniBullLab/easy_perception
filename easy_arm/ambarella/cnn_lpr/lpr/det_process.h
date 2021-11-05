@@ -2,7 +2,7 @@
 #define _DET_PROCESS_H_
 
 #include "cnn_lpr/common/common_process.h"
-#include "cnn_lpr/ssd/ssd.h"
+#include "cnn_lpr/lpr/ssd.h"
 
 typedef struct SSD_ctx_s {
 	ea_net_t *net;

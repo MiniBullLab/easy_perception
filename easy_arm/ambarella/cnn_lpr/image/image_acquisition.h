@@ -1,0 +1,5 @@
+#ifndef _IMAGE_ACQUISITION_H_
+#define _IMAGE_ACQUISITION_H_
+
+
+#endif // _IMAGE_ACQUISITION_H_

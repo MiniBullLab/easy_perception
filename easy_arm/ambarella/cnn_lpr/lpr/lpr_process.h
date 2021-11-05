@@ -3,7 +3,7 @@
 
 #include "cnn_lpr/common/common_process.h"
 #include "cnn_lpr/lpr/lpr.hpp"
-#include "cnn_lpr/ssd/det_process.h"
+#include "cnn_lpr/lpr/det_process.h"
 
 #define CHINESE_LICENSE_STR_LEN		(9)
 #define DRAW_LICNESE_UPSCALE_H		(1.0f)

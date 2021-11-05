@@ -1,4 +1,4 @@
-#include "tof_acquisition.h"
+#include "tof_316_acquisition.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1371,13 +1371,13 @@ static void *run_tof_pthread(void* data)
 	return NULL;
 }
 
-TOFAcquisition::TOFAcquisition()
+TOF316Acquisition::TOF316Acquisition()
 {
     run_tof = 0;
 	pthread_id = 0;
 }
 
-TOFAcquisition::~TOFAcquisition()
+TOF316Acquisition::~TOF316Acquisition()
 {	
 	if(run_tof)
 	{
@@ -1394,7 +1394,7 @@ TOFAcquisition::~TOFAcquisition()
 	}
 }
 
-int TOFAcquisition::open_tof()
+int TOF316Acquisition::open_tof()
 {
     if(fd_iav >= 0)
     {
@@ -1420,7 +1420,7 @@ int TOFAcquisition::open_tof()
 	return 0;
 }
 
-int TOFAcquisition::start()
+int TOF316Acquisition::start()
 {
 	int ret = 0;
     run_tof = 1;
@@ -1428,7 +1428,7 @@ int TOFAcquisition::start()
 	return ret;
 }
 
-int TOFAcquisition::stop()
+int TOF316Acquisition::stop()
 {
 	int ret = 0;
 	run_tof = 0;
@@ -1438,21 +1438,21 @@ int TOFAcquisition::stop()
 	if (pthread_id > 0) {
 		pthread_join(pthread_id, NULL);
 	}
-	LOG(INFO) << "stop TOF success";
+	LOG(WARNING) << "stop TOF success";
 	return ret;
 }
 
-void TOFAcquisition::set_up()
+void TOF316Acquisition::set_up()
 {
 	has_sleep = 0;
 }
 
-void TOFAcquisition::set_sleep()
+void TOF316Acquisition::set_sleep()
 {
 	has_sleep = 1;
 }
 
-void TOFAcquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map)
+void TOF316Acquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map)
 {
 	int i, j, index;
 	float inv_dst = 0;
@@ -1502,7 +1502,7 @@ void TOFAcquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map)
     pthread_mutex_unlock(&tof_buffer.lock);
 }
 
-int TOFAcquisition::dump_ply(const char* save_path, const PointCloud &src_cloud)
+int TOF316Acquisition::dump_ply(const char* save_path, const PointCloud &src_cloud)
 {
 	char ply_header[100];
 	sprintf(ply_header, "element vertex %ld\n", src_cloud.size());
@@ -1525,7 +1525,7 @@ int TOFAcquisition::dump_ply(const char* save_path, const PointCloud &src_cloud)
 	return 0;
 }
 
-int TOFAcquisition::dump_bin(const std::string &save_path, const PointCloud &src_cloud)
+int TOF316Acquisition::dump_bin(const std::string &save_path, const PointCloud &src_cloud)
 {
 	std::ofstream out_file(save_path, std::ios::binary);
 	for (size_t i = 0; i < src_cloud.size(); i++)
@@ -1541,7 +1541,7 @@ int TOFAcquisition::dump_bin(const std::string &save_path, const PointCloud &src
 	return 0;
 }
 
-int TOFAcquisition::read_bin(const std::string &file_path, PointCloud &result_cloud)
+int TOF316Acquisition::read_bin(const std::string &file_path, PointCloud &result_cloud)
 {
 	float data[3] = {0};
 	std::ifstream in_file(file_path, std::ios::in|std::ios::binary);
@@ -1553,7 +1553,7 @@ int TOFAcquisition::read_bin(const std::string &file_path, PointCloud &result_cl
 	result_cloud.clear();
 	while(in_file.read(reinterpret_cast<char*>(data), sizeof(data)))
 	{
-		TOFAcquisition::Point point;
+		TOF316Acquisition::Point point;
 		point.x = data[0];
 		point.y = data[1];
 		point.z = data[2];

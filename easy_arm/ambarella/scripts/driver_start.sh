@@ -18,6 +18,7 @@ rtsp_server &
 test_mempart -m 4 -f
 test_mempart -m 4 -s 0x04000000
 
+
 # init.sh --yuv480p
 # modprobe imx316_mipi bus_id=0x2 vinc_id=0x1 trigger_mode=1
 # modprobe ar0234_mipi bus_id=0x0 vinc_id=0x0
@@ -36,11 +37,3 @@ test_mempart -m 4 -s 0x04000000
 # rtsp_server &
 # test_mempart -m 4 -f
 # test_mempart -m 4 -s 0x04000000
-
-ntpdate 10.0.0.102 &
-
-sleep 5
-
-export LD_LIBRARY_PATH=/data:$LD_LIBRARY_PATH
-
-/data/test_lpr &
