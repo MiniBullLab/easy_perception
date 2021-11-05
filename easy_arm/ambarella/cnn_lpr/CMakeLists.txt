@@ -14,6 +14,7 @@ file(GLOB UTILITY_SRCS
 #collect source files
 file(GLOB LPR_SRCS
     "${PROJECT_SOURCE_DIR}/common/*.cpp"
+    "${PROJECT_SOURCE_DIR}/image/*.S"
     "${PROJECT_SOURCE_DIR}/image/*.cpp"
     "${PROJECT_SOURCE_DIR}/led/*.cpp"
     "${PROJECT_SOURCE_DIR}/net_process/*.cpp"
@@ -50,6 +51,7 @@ target_link_libraries(test_lpr
                       cavalry_mem
                       smartfb
                       textinsert_v2
+                      datatx
                       bz2
                       freetype
                       phase
