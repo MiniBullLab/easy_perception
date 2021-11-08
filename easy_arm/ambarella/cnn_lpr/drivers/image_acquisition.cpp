@@ -21,6 +21,8 @@
 #include <iav_ioctl.h>
 #include "datatx_lib.h"
 
+#include <iostream>
+
 #ifndef VERIFY_BUFFERID
 #define VERIFY_BUFFERID(x)	do {		\
 			if ((x) >= IAV_MAX_CANVAS_BUF_NUM) {	\
@@ -149,6 +151,9 @@ static u8 canvas_map_thru_dmabuf = 0;
 static int decode_mode = 0;
 
 static struct timeval pre = {0, 0}, curr = {0, 0};
+
+static struct ImageBuffer image_buffer;
+volatile int run_camera = 0; 
 
 extern void chrome_convert(yuv_neon_arg *);
 extern void chrome_UV22_convert_to_UV44(yuv_neon_arg *);
@@ -2109,22 +2114,242 @@ static int get_resource_info(void)
 	return 0;
 }
 
+static int get_yuv_data(struct iav_yuv_cap *yuv_cap, u8* buffer)
+{
+	static int pts_prev = 0, pts = 0;
+	int luma_size, chroma_size;
+	u8 * luma_addr = NULL, *chroma_addr = NULL, *chroma_convert_addr = NULL;
+	int ret = 0;
+
+	/* for luma */
+	luma_size = yuv_cap->width * yuv_cap->height;
+	luma_addr = gdma_dst_buf;
+
+	/* for chroma */
+	chroma_addr = luma_addr + luma_size;
+	chroma_size = luma_size >> 1;
+	chroma_convert_addr = chroma_addr + chroma_size;
+
+	/* Save YUV data into memory */
+	if (verbose) {
+		gettimeofday(&curr, NULL);
+		pre = curr;
+	}
+
+	/* Save UV data into another memory if it needs convert. */
+	if (convert_chroma_format(0, chroma_addr, chroma_convert_addr, yuv_cap) < 0) {
+		perror("Failed to save chroma data into buffer !\n");
+		ret = -1;
+		goto SAVE_YUV_DATA_EXIT;
+	}
+	chroma_addr = chroma_convert_addr;
+
+	if (verbose) {
+		gettimeofday(&curr, NULL);
+		printf("33. Save UV [%06ld us].\n", (curr.tv_sec - pre.tv_sec) *
+			1000000 + (curr.tv_usec - pre.tv_usec));
+	}
+
+//	printf("luma_addr:0x%x, luma_size:%d, chroma_addr:0x%x, chroma_size:%d\n", luma_addr, luma_size, chroma_addr, chroma_size);
+	if (verbose) {
+        gettimeofday(&curr, NULL);
+        pre = curr;
+    }
+	memcpy(buffer, luma_addr, luma_size);
+	memcpy(buffer + luma_size, chroma_addr, chroma_size);
+	if (verbose) {
+        gettimeofday(&curr, NULL);
+        printf("44. Copy yuv [%06ld us].\n", (curr.tv_sec - pre.tv_sec) *
+            1000000 + (curr.tv_usec - pre.tv_usec));
+    }
+
+	if (verbose) {
+		pts = yuv_cap->mono_pts;
+		printf("BUF Y 0x%08x, UV 0x%08x, pitch %u, %ux%u = Seqnum[%u], "
+			"PTS [%u-%u].\n", (u32)yuv_cap->y_addr_offset,
+			(u32)yuv_cap->uv_addr_offset, yuv_cap->pitch, yuv_cap->width,
+			yuv_cap->height, yuv_cap->seq_num, pts, (pts - pts_prev));
+		pts_prev = pts;
+	}
+
+SAVE_YUV_DATA_EXIT:
+	return ret;
+}
+
+static int capture_yuv_data(int buffer_id, u8* buffer)
+{
+	int i = 0;
+	int yuv_buffer_size = 0;
+	struct iav_querydesc query_desc;
+	struct iav_canvasdesc *canvas;
+	struct iav_yuv_cap *yuv_cap;
+	int rval = 0;
+
+		/* query */
+	memset(&query_desc, 0, sizeof(query_desc));
+
+	query_desc.qid = IAV_DESC_CANVAS;
+	canvas = &query_desc.arg.canvas;
+	canvas->canvas_id = buffer_id;
+	canvas->query_extra_raw = 0;
+	canvas->yuv_use_dma_buf_fd = 0;
+	canvas->me_use_dma_buf_fd = 0;
+	canvas->skip_cache_sync = 1;
+	canvas->non_block_flag &= ~IAV_BUFCAP_NONBLOCK;
+
+	if (verbose) {
+		gettimeofday(&curr, NULL);
+		pre = curr;
+	}
+	if (ioctl(fd_iav, IAV_IOC_QUERY_DESC, &query_desc) < 0) {
+		perror("IAV_IOC_QUERY_DESC");
+		return -1;
+	}
+
+	if (verbose) {
+		gettimeofday(&curr, NULL);
+		printf("11. Query DESC [%06ld us].\n", 1000000 *
+			(curr.tv_sec - pre.tv_sec)	+ (curr.tv_usec - pre.tv_usec));
+	}
+
+	/* gdma copy allocate */
+	if (gdma_dst_buf_fd < 0) {
+		yuv_cap = &canvas->yuv;
+		yuv_buffer_size = get_yuv_buffer_size(yuv_cap,
+					get_yuv_format(yuv_format, yuv_cap));
+
+		if (yuv_buffer_size == 0) {
+			printf("buffer size need allocate is 0!.\n");
+			return -1;
+		}
+		if (verbose) {
+			gettimeofday(&curr, NULL);
+			pre = curr;
+	    }
+
+		if (alloc_gdma_dst_buf(yuv_buffer_size)) {
+			return -1;
+		}
+		if (verbose) {
+			gettimeofday(&curr, NULL);
+			printf("alloc gdma [%06ld us].\n", 1000000 *
+					(curr.tv_sec - pre.tv_sec)  + (curr.tv_usec - pre.tv_usec));
+		}
+	}
+
+	yuv_cap = &canvas->yuv;
+
+	if (verbose) {
+		gettimeofday(&curr, NULL);
+		pre = curr;
+	}
+
+	if ((yuv_cap->y_addr_offset == 0) ||
+		(yuv_cap->uv_addr_offset == 0)) {
+		printf("YUV buffer [%d] address is NULL! Skip to next!\n", buffer);
+		return -1;
+	}
+
+	rval = copy_yuv_data(canvas->yuv_dma_buf_fd, &canvas->yuv, 0, 0);
+	if (canvas->yuv_dma_buf_fd) {
+		close(canvas->yuv_dma_buf_fd);
+		canvas->yuv_dma_buf_fd = 0;
+	}
+	if (rval < 0) {
+		printf("Failed to copy yuv data of buf [%d].\n", buffer);
+		return -1;
+	}
+
+	if (verbose) {
+		gettimeofday(&curr, NULL);
+		printf("12. GDMA copy [%06ld us].\n", 1000000 *
+			(curr.tv_sec - pre.tv_sec) + (curr.tv_usec - pre.tv_usec));
+	}
+	if (get_yuv_data(yuv_cap, buffer) < 0) {
+		printf("Failed to save YUV data of buf [%d].\n", buffer);
+		return -1;
+	}
+
+	if (gdma_dst_buf_fd >= 0) {
+		free_gdma_dst_buf();
+	}
+
+	return rval;
+}
+
+static int put_image_buffer(cv::Mat &image_mat)
+{
+	uint64_t start_time = 0;
+	int rval = 0;
+	if(image_mat.empty())
+	{
+		std::cout << "image empty!" << std::endl;
+		return -1;
+	}
+	pthread_mutex_lock(&image_buffer.lock);  
+    if ((image_buffer.writepos + 1) % IMAGE_BUFFER_SIZE == image_buffer.readpos)  
+    {  
+        pthread_cond_wait(&image_buffer.notfull, &image_buffer.lock);  
+    }
+	image_buffer.buffer[image_buffer.writepos] = image_mat;
+    image_buffer.writepos++;  
+    if (image_buffer.writepos >= IMAGE_BUFFER_SIZE)  
+        image_buffer.writepos = 0;  
+    pthread_cond_signal(&image_buffer.notempty);  
+    pthread_mutex_unlock(&image_buffer.lock); 
+	LOG(INFO) << "put image";
+	std::cout << "put image" << std::endl;
+	return rval;
+}
+
+static void *run_camera_pthread(void* data)
+{
+	int buffer_id = 0;
+	cv::Mat yuv_buffer = cv::Mat::zeros(IMAGE_HEIGHT + IMAGE_HEIGHT / 2, IMAGE_WIDTH, CV_8UC1);
+	while(run_camera) {
+		cv::Mat bgr;
+		memset(yuv_buffer.data, 0, IMAGE_WIDTH * IMAGE_HEIGHT * 3 / 2 * sizeof(u8));
+		if(capture_yuv_data(buffer_id, yuv_buffer.data) < 0)
+		{
+			LOG(ERROR) << "capture yuv data fail!";
+		}
+		cv::cvtColor(yuv_buffer, bgr, cv::COLOR_YUV2BGR_IYUV);
+		put_image_buffer(bgr);
+	}
+	run_camera = 0;
+	LOG(WARNING) << "Camera thread quit.";
+	return NULL;
+}
+
 ImageAcquisition::ImageAcquisition()
 {
-
+	run_camera = 0;
+	pthread_id = 0;
 }
 
 ImageAcquisition::~ImageAcquisition()
 {
+	if(run_camera)
+	{
+		stop();
+	}
+	pthread_mutex_destroy(&image_buffer.lock);
+    pthread_cond_destroy(&image_buffer.notempty);
+    pthread_cond_destroy(&image_buffer.notfull);
     quit_capture = 1;
+	if(fd_iav >= 0)
+	{
+		close(fd_iav);
+	}
 }
 
-int ImageAcquisition::open_camera()
+int ImageAcquisition::init_camera()
 {
+	u32 buffer_map = 0;
     // open the device
 	if ((fd_iav = open("/dev/iav", O_RDWR, 0)) < 0) 
     {
-        LOG(ERROR) << " open /dev/iav fail!";
+        LOG(ERROR) << "open /dev/iav fail!";
 		return -1;
 	}
     //check iav state
@@ -2138,15 +2363,102 @@ int ImageAcquisition::open_camera()
         LOG(ERROR) << "map_buffer fail!";
         return -1;
     }
+	for (int i = 0; i < IAV_MAX_CANVAS_BUF_NUM; ++i) {
+		fd_yuv[i] = -1;
+		fd_me[i] = -1;
+	}
+	for (int i = 0; i < IAV_MAX_PYRAMID_LAYERS; ++i) {
+		fd_pyramid[i] = -1;
+	}
+
+	current_buffer = 2;
+	VERIFY_BUFFERID(current_buffer);
+	capture_select = CAPTURE_PREVIEW_BUFFER;
+	yuv_buffer_map |= (1 << current_buffer);
+	strcpy(filename, "imx327");
+	yuv_format = YUV420_IYUV;
+
+	if (capture_select != CAPTURE_RAW_BUFFER && capture_select != CAPTURE_PYRAMID_BUFFER) {
+		if (buffer_map) {
+			if (yuv_buffer_map || me0_buffer_map || me1_buffer_map) {
+				printf("cannot query canvas group and single YUV/ME at the same time.\n");
+				return -1;
+			}
+
+			if (current_buffer >= 0) {
+				printf("select canvas cannot use with select group canvas.\n");
+				return -1;
+			}
+
+			if (delay_frame_cap_data) {
+				printf("In querying canvas group mode, option '-d' is not supported.\n");
+				return -1;
+			}
+
+			switch (capture_select) {
+			case CAPTURE_PREVIEW_BUFFER:
+				yuv_buffer_map = buffer_map;
+				break;
+			case CAPTURE_ME0_BUFFER:
+				me0_buffer_map = buffer_map;
+				break;
+			case CAPTURE_ME1_BUFFER:
+				me1_buffer_map = buffer_map;
+				break;
+			default:
+				break;
+			}
+			canvas_map_thru_dmabuf &= buffer_map;
+		} else if (current_buffer < 0) {
+			printf("Invalid buffer id.\n");
+			return -1;
+		} else {
+			/* do nothing */
+		}
+	}
+
+	pthread_mutex_init(&image_buffer.lock, NULL);  
+    pthread_cond_init(&image_buffer.notempty, NULL);  
+    pthread_cond_init(&image_buffer.notfull, NULL);  
+    image_buffer.readpos = 0;  
+    image_buffer.writepos = 0;
+	LOG(INFO) << "Camera init success!";
     return 0;
 }
 
 int ImageAcquisition::start()
 {
-    return 0;
+    int ret = 0;
+    run_camera = 1;
+    ret = pthread_create(&pthread_id, NULL, run_camera_pthread, NULL);
+	return ret;
 }
 
 int ImageAcquisition::stop()
 {
-    return 0;
+	int ret = 0;
+	run_camera = 0;
+	pthread_cond_signal(&image_buffer.notfull);
+	pthread_cond_signal(&image_buffer.notempty);
+	pthread_mutex_unlock(&image_buffer.lock);
+	if (pthread_id > 0) {
+		pthread_join(pthread_id, NULL);
+	}
+	LOG(WARNING) << "stop camera success";
+	return ret;
+}
+
+void ImageAcquisition::get_image(cv::Mat &src_image)
+{
+    pthread_mutex_lock(&image_buffer.lock);  
+    if (image_buffer.writepos == image_buffer.readpos)  
+    {  
+        pthread_cond_wait(&image_buffer.notempty, &image_buffer.lock);  
+    }
+	src_image = image_buffer.buffer[image_buffer.readpos].clone();
+    image_buffer.readpos++;  
+    if (image_buffer.readpos >= IMAGE_BUFFER_SIZE)  
+        image_buffer.readpos = 0; 
+    pthread_cond_signal(&image_buffer.notfull);  
+    pthread_mutex_unlock(&image_buffer.lock);
 }

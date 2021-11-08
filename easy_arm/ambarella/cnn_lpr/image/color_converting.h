@@ -3,6 +3,8 @@
 
 #include "image_data_structure.h"
 
+#include <opencv2/core.hpp>
+
 void rgbToGray(const ElementRGB *rgbImage, int width, int height, unsigned char *grayImage);
 
 void rgbToLuv(const ElementRGB *rgbImage, int width, int height, ElementLUV *luvImage);

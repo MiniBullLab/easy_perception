@@ -1,20 +1,30 @@
 PROJECT(cnn_lpr)
 
+set(CMAKE_ASM_COMPILER ${CMAKE_C_COMPILER})
+
 #include amba_arm directories
 include_directories(${amba_arm_BINARY_DIR})
 include_directories(${amba_arm_SOURCE_DIR})
 
 add_definitions(-D_USE_AMBAR_)
 
+add_executable(test_lpr)
+
 #collect source files
 file(GLOB UTILITY_SRCS
     "${amba_arm_SOURCE_DIR}/utility/*.cpp"
 )
 
+file(GLOB DRIVERS_SRCS
+    "${PROJECT_SOURCE_DIR}/drivers/*.cpp"
+    "${PROJECT_SOURCE_DIR}/drivers/*.S"
+	)
+#message(STATUS "Found ASM ${DRIVERS_SRCS}")
+#set_source_files_properties(${DRIVERS_SRCS} PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
+
 #collect source files
 file(GLOB LPR_SRCS
     "${PROJECT_SOURCE_DIR}/common/*.cpp"
-    "${PROJECT_SOURCE_DIR}/image/*.S"
     "${PROJECT_SOURCE_DIR}/image/*.cpp"
     "${PROJECT_SOURCE_DIR}/led/*.cpp"
     "${PROJECT_SOURCE_DIR}/net_process/*.cpp"
@@ -26,7 +36,14 @@ file(GLOB LPR_SRCS
     "${PROJECT_SOURCE_DIR}/tof/*.cpp"
 	)
 
-add_executable(test_lpr test_lpr.cpp ${LPR_SRCS} ${UTILITY_SRCS})
+target_sources(test_lpr
+        PRIVATE
+        "${PROJECT_SOURCE_DIR}/test_lpr.cpp"
+        ${LPR_SRCS}
+        ${UTILITY_SRCS}
+        ${DRIVERS_SRCS}
+        )
+
 target_link_libraries(test_lpr
                       opencv_core
                       opencv_imgcodecs

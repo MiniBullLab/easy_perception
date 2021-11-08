@@ -69,9 +69,6 @@
 #define SPI_OFFSET 			(86)
 #define SPI_LEN 			(90)
 
-#define BUFFER_SIZE (10)
-#define MAX_POINT_CLOUD (240*180)
-
 #ifndef CHECK_LIMIT
 	#define CHECK_LIMIT(x, low, high) MAX((low), MIN((x), (high)))
 #endif
@@ -200,17 +197,6 @@ enum sensor_wid_hei {
 	WIDTH_316 = 240,
 	HEIGHT_456 = 480,
 	HEIGHT_316 = 180,
-};
-
-struct TOFBuffer  
-{  	
-    float buffer_x[BUFFER_SIZE][MAX_POINT_CLOUD];
-	float buffer_y[BUFFER_SIZE][MAX_POINT_CLOUD];
-	float buffer_z[BUFFER_SIZE][MAX_POINT_CLOUD];
-    pthread_mutex_t lock; /* 互斥体lock 用于对缓冲区的互斥操作 */  
-    int readpos, writepos; /* 读写指针*/  
-    pthread_cond_t notempty; /* 缓冲区非空的条件变量 */  
-    pthread_cond_t notfull; /* 缓冲区未满的条件变量 */  
 };
 
 static char file_prefix[MAX_STRING_LENGTH] = "/root";
@@ -1283,7 +1269,7 @@ static int put_buffer(reso *win, tof_mem_ptr *tof_ptr)
 	Zvalue = tof_ptr->targetData->getZvalue_ptr();
 
 	pthread_mutex_lock(&tof_buffer.lock);  
-    if ((tof_buffer.writepos + 1) % BUFFER_SIZE == tof_buffer.readpos)  
+    if ((tof_buffer.writepos + 1) % TOF_BUFFER_SIZE == tof_buffer.readpos)  
     {  
         pthread_cond_wait(&tof_buffer.notfull, &tof_buffer.lock);  
     }
@@ -1296,7 +1282,7 @@ static int put_buffer(reso *win, tof_mem_ptr *tof_ptr)
 	}
     
     tof_buffer.writepos++;  
-    if (tof_buffer.writepos >= BUFFER_SIZE)  
+    if (tof_buffer.writepos >= TOF_BUFFER_SIZE)  
         tof_buffer.writepos = 0;  
     pthread_cond_signal(&tof_buffer.notempty);  
     pthread_mutex_unlock(&tof_buffer.lock);  
@@ -1362,12 +1348,9 @@ static void *run_tof_pthread(void* data)
 			sleep(1);
 		}
 	}
-	do {
-		run_tof = 0;
-		sigstop();
-		LOG(WARNING) << "TOF thread quit.";
-	} while (0);
-
+	run_tof = 0;
+	sigstop();
+	LOG(WARNING) << "TOF thread quit.";
 	return NULL;
 }
 
@@ -1496,7 +1479,7 @@ void TOF316Acquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map
 		depth_ptr++;
 	} 
     tof_buffer.readpos++;  
-    if (tof_buffer.readpos >= BUFFER_SIZE)  
+    if (tof_buffer.readpos >= TOF_BUFFER_SIZE)  
         tof_buffer.readpos = 0; 
     pthread_cond_signal(&tof_buffer.notfull);  
     pthread_mutex_unlock(&tof_buffer.lock);

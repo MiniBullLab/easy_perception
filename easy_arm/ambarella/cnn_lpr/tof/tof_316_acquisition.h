@@ -10,6 +10,20 @@
 //opencv
 #include <opencv2/core.hpp>
 
+#define TOF_BUFFER_SIZE (10)
+#define MAX_POINT_CLOUD (240*180)
+
+struct TOFBuffer  
+{  	
+    float buffer_x[TOF_BUFFER_SIZE][MAX_POINT_CLOUD];
+	float buffer_y[TOF_BUFFER_SIZE][MAX_POINT_CLOUD];
+	float buffer_z[TOF_BUFFER_SIZE][MAX_POINT_CLOUD];
+    pthread_mutex_t lock; /* 互斥体lock 用于对缓冲区的互斥操作 */  
+    int readpos, writepos; /* 读写指针*/  
+    pthread_cond_t notempty; /* 缓冲区非空的条件变量 */  
+    pthread_cond_t notfull; /* 缓冲区未满的条件变量 */  
+};
+
 class TOF316Acquisition
 {
 public:
