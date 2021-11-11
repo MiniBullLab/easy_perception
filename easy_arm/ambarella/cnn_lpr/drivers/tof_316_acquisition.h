@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <pthread.h>
+#include <sys/prctl.h>
 
 #include <glog/logging.h>
 #include <glog/raw_logging.h>
@@ -10,8 +11,11 @@
 //opencv
 #include <opencv2/core.hpp>
 
-#define TOF_BUFFER_SIZE (10)
+#define TOF_BUFFER_SIZE (2)
 #define MAX_POINT_CLOUD (240*180)
+
+#define DEPTH_WIDTH (240)
+#define DEPTH_HEIGTH (180)
 
 struct TOFBuffer  
 {  	
@@ -46,6 +50,9 @@ public:
 
     void set_up();
     void set_sleep();
+
+    void get_tof_pc(PointCloud &point_cloud);
+    void get_tof_depth_map(cv::Mat &depth_map);
 
     void get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map);
 

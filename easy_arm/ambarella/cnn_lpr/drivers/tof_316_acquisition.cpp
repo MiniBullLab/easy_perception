@@ -234,10 +234,10 @@ static int trigger_flag = 1;
 static int fd_spi = -1;
 static const char *device = "/dev/spidev1.0";
 
+static struct TOFBuffer tof_buffer;  
+
 volatile int run_tof = 0;
 volatile int has_sleep = 1;
-
-struct TOFBuffer tof_buffer;  
 
 static int read_calibration_data(u8 *calib_addr, struct calibration_info *align_info)
 {
@@ -1303,6 +1303,8 @@ static void *run_tof_pthread(void* data)
 	unsigned long prev_pts4 = 0;
 	p2dIO p2dio;
 
+	prctl(PR_SET_NAME, "tof_pthread");
+
 	if (tof_decode_init(tof_ptr, win, &p2dio) < 0) {
 		LOG(ERROR) << "tof_decode_init fail!";
         run_tof = 0;
@@ -1362,19 +1364,19 @@ TOF316Acquisition::TOF316Acquisition()
 
 TOF316Acquisition::~TOF316Acquisition()
 {	
-	if(run_tof)
+	if(run_tof > 0)
 	{
 		stop();
 	}
 	pthread_mutex_destroy(&tof_buffer.lock);
     pthread_cond_destroy(&tof_buffer.notempty);
     pthread_cond_destroy(&tof_buffer.notfull);
-	sigstop();
 	if(fd_iav >= 0)
 	{
 		close(fd_iav);
 		fd_iav = -1;
 	}
+	LOG(WARNING) << "~TOF316Acquisition()";
 }
 
 int TOF316Acquisition::open_tof()
@@ -1407,7 +1409,15 @@ int TOF316Acquisition::start()
 {
 	int ret = 0;
     run_tof = 1;
+	tof_buffer.readpos = 0;  
+    tof_buffer.writepos = 0;
     ret = pthread_create(&pthread_id, NULL, run_tof_pthread, NULL);
+	if(ret < 0)
+    {
+        run_tof = 0;
+        LOG(ERROR) << "start tof pthread fail!";
+    }
+	LOG(INFO) << "start tof pthread success!";
 	return ret;
 }
 
@@ -1415,11 +1425,11 @@ int TOF316Acquisition::stop()
 {
 	int ret = 0;
 	run_tof = 0;
-	pthread_cond_signal(&tof_buffer.notfull);
-	pthread_cond_signal(&tof_buffer.notempty);
-	pthread_mutex_unlock(&tof_buffer.lock);
 	if (pthread_id > 0) {
+		pthread_cond_signal(&tof_buffer.notfull);  
+		pthread_mutex_unlock(&tof_buffer.lock);
 		pthread_join(pthread_id, NULL);
+		pthread_id = 0;
 	}
 	LOG(WARNING) << "stop TOF success";
 	return ret;
@@ -1435,6 +1445,88 @@ void TOF316Acquisition::set_sleep()
 	has_sleep = 1;
 }
 
+void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map)
+{
+	int i, j, index;
+	float inv_dst = 0;
+	float max_dst = 0;
+	uchar* depth_ptr = depth_map.ptr<uchar>(0);
+	if (sensor_type == SENSOR_IMX316) {
+		max_dst = MAX_DIST_316;
+	} else {
+		max_dst = MAX_DIST_456;
+	}
+	max_dst = 3.0f;
+	if(pthread_id > 0) 
+	{
+		pthread_mutex_lock(&tof_buffer.lock);  
+		if (tof_buffer.writepos == tof_buffer.readpos)  
+		{  
+			pthread_cond_wait(&tof_buffer.notempty, &tof_buffer.lock);  
+		}
+		for(int i = 0; i < MAX_POINT_CLOUD; i++)
+		{
+			if (tof_buffer.buffer_z[tof_buffer.readpos][i] > max_dst || \
+					tof_buffer.buffer_z[tof_buffer.readpos][i] < 0.8f || \
+					(tof_buffer.buffer_z[tof_buffer.readpos][i] == 0))
+					{
+						*depth_ptr = 0;
+					} 
+					else 
+					{
+						inv_dst = max_dst - tof_buffer.buffer_z[tof_buffer.readpos][i];
+						*depth_ptr = static_cast<uchar>(inv_dst * 255 / max_dst);
+					}
+			depth_ptr++;
+		} 
+		tof_buffer.readpos++;  
+		if (tof_buffer.readpos >= TOF_BUFFER_SIZE)  
+			tof_buffer.readpos = 0; 
+		pthread_cond_signal(&tof_buffer.notfull);  
+		pthread_mutex_unlock(&tof_buffer.lock);
+	}
+}
+
+void TOF316Acquisition::get_tof_pc(PointCloud &point_cloud)
+{
+	int i, j, index;
+	float inv_dst = 0;
+	float max_dst = 0;
+	if (sensor_type == SENSOR_IMX316) {
+		max_dst = MAX_DIST_316;
+	} else {
+		max_dst = MAX_DIST_456;
+	}
+	max_dst = 3.0f;
+	point_cloud.clear(); 
+	if(pthread_id > 0) 
+	{
+		pthread_mutex_lock(&tof_buffer.lock);  
+		if (tof_buffer.writepos == tof_buffer.readpos)  
+		{  
+			pthread_cond_wait(&tof_buffer.notempty, &tof_buffer.lock);  
+		}
+		for(int i = 0; i < MAX_POINT_CLOUD; i++)
+		{
+			if(tof_buffer.buffer_z[tof_buffer.readpos][i] >= 0.8f && \
+				tof_buffer.buffer_z[tof_buffer.readpos][i] <= max_dst)
+				{
+					struct Point temp_point;
+					temp_point.x = tof_buffer.buffer_x[tof_buffer.readpos][i];
+					temp_point.y = tof_buffer.buffer_y[tof_buffer.readpos][i];
+					temp_point.z = tof_buffer.buffer_z[tof_buffer.readpos][i];
+					temp_point.index = i;
+					point_cloud.push_back(temp_point);
+				}
+		} 
+		tof_buffer.readpos++;  
+		if (tof_buffer.readpos >= TOF_BUFFER_SIZE)  
+			tof_buffer.readpos = 0; 
+		pthread_cond_signal(&tof_buffer.notfull);  
+		pthread_mutex_unlock(&tof_buffer.lock);
+	}
+}
+
 void TOF316Acquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map)
 {
 	int i, j, index;
@@ -1448,41 +1540,44 @@ void TOF316Acquisition::get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map
 	}
 	max_dst = 3.0f;
 	point_cloud.clear(); 
-    pthread_mutex_lock(&tof_buffer.lock);  
-    if (tof_buffer.writepos == tof_buffer.readpos)  
-    {  
-        pthread_cond_wait(&tof_buffer.notempty, &tof_buffer.lock);  
-    }
-	for(int i = 0; i < MAX_POINT_CLOUD; i++)
+	if(pthread_id > 0) 
 	{
-		if(tof_buffer.buffer_z[tof_buffer.readpos][i] >= 0.8f && \
-			tof_buffer.buffer_z[tof_buffer.readpos][i] <= max_dst)
-			{
-				struct Point temp_point;
-				temp_point.x = tof_buffer.buffer_x[tof_buffer.readpos][i];
-				temp_point.y = tof_buffer.buffer_y[tof_buffer.readpos][i];
-				temp_point.z = tof_buffer.buffer_z[tof_buffer.readpos][i];
-				temp_point.index = i;
-				point_cloud.push_back(temp_point);
-			}
-		if (tof_buffer.buffer_z[tof_buffer.readpos][i] > max_dst || \
-				tof_buffer.buffer_z[tof_buffer.readpos][i] < 0.8f || \
-				(tof_buffer.buffer_z[tof_buffer.readpos][i] == 0))
-				 {
-					*depth_ptr = 0;
-				 } 
-				 else 
-				 {
-					 inv_dst = max_dst - tof_buffer.buffer_z[tof_buffer.readpos][i];
-					*depth_ptr = static_cast<uchar>(inv_dst * 255 / max_dst);
-				 }
-		depth_ptr++;
-	} 
-    tof_buffer.readpos++;  
-    if (tof_buffer.readpos >= TOF_BUFFER_SIZE)  
-        tof_buffer.readpos = 0; 
-    pthread_cond_signal(&tof_buffer.notfull);  
-    pthread_mutex_unlock(&tof_buffer.lock);
+		pthread_mutex_lock(&tof_buffer.lock);  
+		if (tof_buffer.writepos == tof_buffer.readpos)  
+		{  
+			pthread_cond_wait(&tof_buffer.notempty, &tof_buffer.lock);  
+		}
+		for(int i = 0; i < MAX_POINT_CLOUD; i++)
+		{
+			if(tof_buffer.buffer_z[tof_buffer.readpos][i] >= 0.8f && \
+				tof_buffer.buffer_z[tof_buffer.readpos][i] <= max_dst)
+				{
+					struct Point temp_point;
+					temp_point.x = tof_buffer.buffer_x[tof_buffer.readpos][i];
+					temp_point.y = tof_buffer.buffer_y[tof_buffer.readpos][i];
+					temp_point.z = tof_buffer.buffer_z[tof_buffer.readpos][i];
+					temp_point.index = i;
+					point_cloud.push_back(temp_point);
+				}
+			if (tof_buffer.buffer_z[tof_buffer.readpos][i] > max_dst || \
+					tof_buffer.buffer_z[tof_buffer.readpos][i] < 0.8f || \
+					(tof_buffer.buffer_z[tof_buffer.readpos][i] == 0))
+					{
+						*depth_ptr = 0;
+					} 
+					else 
+					{
+						inv_dst = max_dst - tof_buffer.buffer_z[tof_buffer.readpos][i];
+						*depth_ptr = static_cast<uchar>(inv_dst * 255 / max_dst);
+					}
+			depth_ptr++;
+		} 
+		tof_buffer.readpos++;  
+		if (tof_buffer.readpos >= TOF_BUFFER_SIZE)  
+			tof_buffer.readpos = 0; 
+		pthread_cond_signal(&tof_buffer.notfull);  
+		pthread_mutex_unlock(&tof_buffer.lock);
+	}
 }
 
 int TOF316Acquisition::dump_ply(const char* save_path, const PointCloud &src_cloud)

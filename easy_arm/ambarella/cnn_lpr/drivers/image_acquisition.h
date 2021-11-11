@@ -2,6 +2,7 @@
 #define _IMAGE_ACQUISITION_H_
 
 #include <pthread.h>
+#include <sys/prctl.h>
 
 #include <glog/logging.h>
 #include <glog/raw_logging.h>
@@ -11,7 +12,9 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 
-#define IMAGE_BUFFER_SIZE (40)
+#include "utility/utils.h"
+
+#define IMAGE_BUFFER_SIZE (4)
 #define IMAGE_WIDTH (1920)
 #define IMAGE_HEIGHT (1080)
 
@@ -31,7 +34,7 @@ public:
     ImageAcquisition();
     ~ImageAcquisition();
 
-    int init_camera();
+    int open_camera();
 
     int start();
     int stop();

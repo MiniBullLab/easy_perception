@@ -39,8 +39,16 @@ test_mempart -m 4 -s 0x04000000
 
 ntpdate 10.0.0.102 &
 
-sleep 5
+sleep 2
 
 export LD_LIBRARY_PATH=/data:$LD_LIBRARY_PATH
+
+if [ ! -d "/data/glog_file" ]; then
+    mkdir /data/glog_file
+fi
+
+if [ ! -d "/data/save_data" ]; then
+    mkdir /data/save_data
+fi
 
 /data/test_lpr &

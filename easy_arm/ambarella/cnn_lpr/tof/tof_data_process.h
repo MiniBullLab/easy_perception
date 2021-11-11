@@ -6,7 +6,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 
-#include "tof_316_acquisition.h"
+#include "cnn_lpr/drivers/tof_316_acquisition.h"
 
 bool is_file_exists(const std::string& name);
 

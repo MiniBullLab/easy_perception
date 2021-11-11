@@ -14,7 +14,7 @@ ViBeBGS::ViBeBGS():
 
 ViBeBGS::~ViBeBGS()
 {
-    libvibeModel_Sequential_Free(model);
+    // libvibeModel_Sequential_Free(model);
     if(vibe)
     {
         delete vibe;
@@ -29,18 +29,18 @@ void ViBeBGS::process(const cv::Mat &img_input, cv::Mat &img_output, cv::Mat &im
         return;
 
     img_output = cv::Mat::zeros(img_input.size(), CV_8UC1);
-    img_bgmodel = cv::Mat::zeros(img_input.size(), CV_8UC1);
+    // img_bgmodel = cv::Mat::zeros(img_input.size(), CV_8UC1);
 
     if (firstTime)
     {
         /* Initialization of the ViBe model. */
-        libvibeModel_Sequential_AllocInit_8u_C1R(model, img_input.data, img_input.cols, img_input.rows);
+        // libvibeModel_Sequential_AllocInit_8u_C1R(model, img_input.data, img_input.cols, img_input.rows);
 
         /* Sets default model values. */
         // libvibeModel_Sequential_SetNumberOfSamples(model, numberOfSamples);
-        libvibeModel_Sequential_SetMatchingThreshold(model, matchingThreshold);
-        libvibeModel_Sequential_SetMatchingNumber(model, matchingNumber);
-        libvibeModel_Sequential_SetUpdateFactor(model, updateFactor);
+        // libvibeModel_Sequential_SetMatchingThreshold(model, matchingThreshold);
+        // libvibeModel_Sequential_SetMatchingNumber(model, matchingNumber);
+        // libvibeModel_Sequential_SetUpdateFactor(model, updateFactor);
 
         vibe->initModel(img_input);
 
@@ -59,7 +59,7 @@ void ViBeBGS::process(const cv::Mat &img_input, cv::Mat &img_output, cv::Mat &im
 void ViBeBGS::init()
 {
     firstTime = true;
-    model = libvibeModel_Sequential_New();
+    // model = libvibeModel_Sequential_New();
 
     vibe = new IViBeBGS();
 
@@ -69,7 +69,7 @@ void ViBeBGS::init()
 void ViBeBGS::saveConfig()
 {
     cv::FileStorage fs;
-    fs.open("./config/ViBeBGS.xml", cv::FileStorage::WRITE);
+    fs.open("./ViBeBGS.xml", cv::FileStorage::WRITE);
 
     cv::write(fs, "numberOfSamples", numberOfSamples);
     cv::write(fs, "matchingThreshold", matchingThreshold);
@@ -82,7 +82,7 @@ void ViBeBGS::saveConfig()
 void ViBeBGS::loadConfig()
 {
     cv::FileStorage fs;
-    fs.open("./config/ViBeBGS.xml", cv::FileStorage::READ);
+    fs.open("./ViBeBGS.xml", cv::FileStorage::READ);
 
     cv::read(fs["numberOfSamples"], numberOfSamples, DEFAULT_NUM_SAMPLES);
     cv::read(fs["matchingThreshold"], matchingThreshold, DEFAULT_MATCH_THRESH);
