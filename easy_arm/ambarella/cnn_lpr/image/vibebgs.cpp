@@ -5,11 +5,10 @@ ViBeBGS::ViBeBGS():
     numberOfSamples(DEFAULT_NUM_SAMPLES),
     matchingThreshold(DEFAULT_MATCH_THRESH),
     matchingNumber(DEFAULT_MATCH_NUM),
-    updateFactor(DEFAULT_UPDATE_FACTOR),
-    model(nullptr)
+    updateFactor(DEFAULT_UPDATE_FACTOR)
 {
     init();
-    std::cout << "ViBeBGS()" << std::endl;
+    LOG(WARNING) << "ViBeBGS()";
 }
 
 ViBeBGS::~ViBeBGS()
@@ -20,7 +19,7 @@ ViBeBGS::~ViBeBGS()
         delete vibe;
         vibe = NULL;
     }
-    std::cout << "~ViBeBGS()" << std::endl;
+    LOG(WARNING) << "~ViBeBGS()";
 }
 
 void ViBeBGS::process(const cv::Mat &img_input, cv::Mat &img_output, cv::Mat &img_bgmodel)
@@ -60,10 +59,9 @@ void ViBeBGS::init()
 {
     firstTime = true;
     // model = libvibeModel_Sequential_New();
+    // loadConfig();
 
     vibe = new IViBeBGS();
-
-    loadConfig();
 }
 
 void ViBeBGS::saveConfig()

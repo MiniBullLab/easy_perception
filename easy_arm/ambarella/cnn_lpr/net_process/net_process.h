@@ -7,6 +7,10 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <signal.h>
+#include <semaphore.h>
+#include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/socket.h>
@@ -24,14 +28,29 @@ public:
     ~NetProcess();
 
     int init_network();
+    int start();
+    int stop();
+
+    int process_recv();
+
     int send_result(const std::string &lpr_result, const int code);
 
+    int send_log_path();
+
+private:
+
+    
 private:
     int udp_socket_fd;
     int upd_port;
-
     int dest_port;
 	struct sockaddr_in dest_addr;
+
+    int broadcast_socket_fd;
+    int broadcast_port;
+
+    pthread_t heart_pthread_id;
+	pthread_t recv_thread_id;
 };
 
 #endif // _NET_PROCESS_H_

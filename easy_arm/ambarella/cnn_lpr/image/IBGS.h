@@ -19,6 +19,9 @@ along with BGSLibrary.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <opencv2/core.hpp>
 
+#include <glog/logging.h>
+#include <glog/raw_logging.h>
+
 class IBGS
 {
 public:

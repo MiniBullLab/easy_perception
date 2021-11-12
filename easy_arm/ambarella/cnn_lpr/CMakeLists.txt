@@ -17,6 +17,7 @@ file(GLOB UTILITY_SRCS
 
 file(GLOB DRIVERS_SRCS
     "${PROJECT_SOURCE_DIR}/drivers/*.cpp"
+    "${PROJECT_SOURCE_DIR}/drivers/*.c"
     "${PROJECT_SOURCE_DIR}/drivers/*.S"
 	)
 #message(STATUS "Found ASM ${DRIVERS_SRCS}")

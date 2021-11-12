@@ -18,6 +18,8 @@
 
 unsigned long get_current_time(void);
 
+long get_time_stamp(void);
+
 void ListPath(std::string const &path, std::vector<std::string> &paths);
 
 void ListImages(std::string const &path, std::vector<std::string> &images);

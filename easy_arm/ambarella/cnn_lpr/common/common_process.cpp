@@ -125,3 +125,11 @@ int tensor2mat_yuv2bgr_nv12(ea_tensor_t *tensor, cv::Mat &bgr)
 
 	return rval;
 }
+
+void fill_data(unsigned char* addr, int data)
+{
+	addr[0] = (data >> 24) & 0xFF;
+	addr[1] = (data >> 16) & 0xFF;
+	addr[2] = (data >>  8) & 0xFF;
+	addr[3] = (data >>  0) & 0xFF;
+}

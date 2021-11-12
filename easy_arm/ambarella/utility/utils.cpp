@@ -7,6 +7,18 @@ unsigned long get_current_time(void)
     return (tv.tv_sec*1000000 + tv.tv_usec);
 }
 
+long get_time_stamp(void)
+{
+	struct timeval tv;
+	long time_stamp;
+
+	gettimeofday(&tv, NULL);
+
+	time_stamp = tv.tv_sec * 1000 + tv.tv_usec / 1000;	//Accurate to millisecond
+
+	return time_stamp;
+}
+
 void ListPath(std::string const &path, std::vector<std::string> &paths) {
     paths.clear();
     struct dirent *entry;

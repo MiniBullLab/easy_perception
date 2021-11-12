@@ -11,11 +11,12 @@
 //opencv
 #include <opencv2/core.hpp>
 
-#define TOF_BUFFER_SIZE (2)
+#define TOF_BUFFER_SIZE (3)
 #define MAX_POINT_CLOUD (240*180)
 
 #define DEPTH_WIDTH (240)
 #define DEPTH_HEIGTH (180)
+#define TOF_SIZE		(DEPTH_WIDTH * DEPTH_HEIGTH * 4) //float type
 
 struct TOFBuffer  
 {  	
@@ -51,10 +52,13 @@ public:
     void set_up();
     void set_sleep();
 
-    void get_tof_pc(PointCloud &point_cloud);
     void get_tof_depth_map(cv::Mat &depth_map);
 
-    void get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map);
+    void get_tof_Z(unsigned char* addr);
+
+    // void get_tof_pc(PointCloud &point_cloud);
+
+    // void get_tof_data(PointCloud &point_cloud, cv::Mat &depth_map);
 
     int dump_ply(const char* save_path, const PointCloud &src_cloud);
     int dump_bin(const std::string &save_path, const PointCloud &src_cloud);

@@ -76,4 +76,6 @@ void env_deinit(global_control_param_t *G_param);
 
 int tensor2mat_yuv2bgr_nv12(ea_tensor_t *tensor, cv::Mat &bgr);
 
+void fill_data(unsigned char* addr, int data);
+
 #endif // _COMMON_PROCESS_H_

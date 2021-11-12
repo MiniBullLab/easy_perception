@@ -16,7 +16,6 @@
 #include <opencv2/core.hpp>
 
 #include "IBGS.h"
-#include "vibe-background-sequential.h"
 #include "IViBeBGS.h"
 
 class ViBeBGS: public IBGS
@@ -39,7 +38,7 @@ private:
      int matchingThreshold;
      int matchingNumber;
      int updateFactor;
-     vibeModel_Sequential_t* model;
+     // vibeModel_Sequential_t* model;
 
      IViBeBGS *vibe;
 

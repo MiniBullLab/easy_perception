@@ -13,10 +13,18 @@
 #include "cnn_lpr/tof/tof_data_process.h"
 #include "cnn_lpr/image/vibebgs.h"
 
-#include "cnn_lpr/common/save_data_process.h"
+#include "cnn_lpr/net_process/tcp_process.h"
 #include "cnn_lpr/net_process/net_process.h"
+#include "cnn_lpr/common/save_data_process.h"
 
 #include "utility/utils.h"
+
+#define FRAME_HEADER1	(0x55)
+#define FRAME_HEADER2	(0xAA)
+#define YUV_DATA_LENGTH	(8 + 4 + 4 + 4 + 4 + IMAGE_YUV_SIZE)
+#define TOTAL_YUV_SIZE	(2 + 1 + 4 + YUV_DATA_LENGTH)
+#define TOF_DATA_LENGTH (8 + 4 + 4 + 4 + 4 + TOF_SIZE)
+#define TOTAL_TOF_SIZE  (2 + 1 + 4 + TOF_DATA_LENGTH)
 
 #define TIME_MEASURE_LOOPS			(100)
 
@@ -34,8 +42,9 @@ static pthread_mutex_t ssd_mutex;
 volatile int run_flag = 1;
 volatile int run_lpr = 0;
 
-#ifdef ONLY_SAVE_DATA
+#if defined(ONLY_SAVE_DATA) || defined(ONLY_SEND_DATA)
 static ImageAcquisition image_geter;
+static TCPProcess tcp_process;
 #endif
 static TOF316Acquisition tof_geter;
 static SaveDataProcess save_process;
@@ -219,10 +228,10 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 
 				start_time = gettimeus();
 
-				// TIME_MEASURE_START(debug_en);
-				// RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
-				// save_process.put_image_data(bgr);
-				// TIME_MEASURE_END("[SSD] yuv to bgr time", debug_en);
+				TIME_MEASURE_START(1);
+				RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
+				save_process.put_image_data(bgr);
+				TIME_MEASURE_END("[SSD] yuv to bgr time", 1);
 
 				TIME_MEASURE_START(debug_en);
 				RVAL_OK(ea_cvt_color_resize(img_tensor, SSD_ctx.net_input.tensor,
@@ -300,6 +309,19 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 		LOG(WARNING) << "SSD thread quit.";
 	} while (0);
 
+	return NULL;
+}
+
+static void *process_recv_pthread(void *thread_params)
+{
+	uint64_t debug_time = 0;
+	prctl(PR_SET_NAME, "process_recv_pthread");
+	while(run_flag)
+	{
+		net_process.process_recv();
+		usleep(50000);
+	}
+	LOG(WARNING) << "process_recv_pthread quit";
 	return NULL;
 }
 
@@ -406,7 +428,8 @@ static void point_cloud_process(const global_control_param_t *G_param)
 			}
 			tof_geter.set_up();
 			run_lpr = 1;
-			save_process.put_tof_data(depth_map);
+			if(!first_save)
+				save_process.put_tof_data(depth_map);
 			if(has_lpr == 1)
 			{
 				point_cout_list.push_back(bg_point_count);
@@ -473,8 +496,11 @@ static void point_cloud_process(const global_control_param_t *G_param)
 				no_process_number = 0;
 				has_lpr = 0;
 				run_lpr = 0;
-				save_process.stop();
-				first_save = true;
+				if(!first_save)
+				{
+					save_process.stop();
+					first_save = true;
+				}
 				tof_geter.set_sleep();
 				LOG(WARNING) << "no process";
 			}
@@ -493,12 +519,13 @@ static void point_cloud_process(const global_control_param_t *G_param)
 	}
 	delete bgs;
     bgs = NULL;
-	LOG(INFO) << "stop point cloud process";
+	LOG(WARNING) << "stop point cloud process";
 }
 
 static int start_all(global_control_param_t *G_param)
 {
 	int rval = 0;
+	pthread_t process_recv_pthread_id = 0;
 	pthread_t ssd_pthread_id = 0;
 	pthread_t lpr_pthread_id = 0;
 	ssd_lpr_thread_params_t lpr_thread_params;
@@ -506,6 +533,17 @@ static int start_all(global_control_param_t *G_param)
 
 	ea_tensor_t *img_tensor = NULL;
 	ea_img_resource_data_t data;
+
+	if(tof_geter.start() < 0)
+	{
+		rval = -1;
+		run_flag = 0;
+		LOG(ERROR) << "start tof fail!";
+	}
+	else
+	{
+		LOG(INFO) << "start tof success";
+	}
 
 	// if(image_geter.start() < 0)
 	// {
@@ -518,23 +556,16 @@ static int start_all(global_control_param_t *G_param)
 	// 	LOG(INFO) << "start image success";
 	// }
 
-	if(tof_geter.start() < 0)
+	if(net_process.start() < 0)
 	{
 		rval = -1;
 		run_flag = 0;
-		LOG(ERROR) << "start tof fail!";
+		LOG(ERROR) << "start image fail!";
 	}
 	else
 	{
-		LOG(INFO) << "start tof success";
+		LOG(INFO) << "start image success";
 	}
-	
-	if(net_process.init_network() < 0)
-	{
-		rval = -1;
-		run_flag = 0;
-	}
-	LOG(INFO) << "net init success";
 
 	do {
 		pthread_mutex_init(&result_mutex, NULL);
@@ -560,6 +591,8 @@ static int start_all(global_control_param_t *G_param)
 		RVAL_ASSERT(rval == 0);
 		rval = pthread_create(&lpr_pthread_id, NULL, run_lpr_pthread, (void*)&lpr_thread_params);
 		RVAL_ASSERT(rval == 0);
+		rval = pthread_create(&process_recv_pthread_id, NULL, process_recv_pthread, NULL);
+		RVAL_ASSERT(rval == 0);
 	} while (0);
 	LOG(INFO) << "start_ssd_lpr success";
 
@@ -571,28 +604,16 @@ static int start_all(global_control_param_t *G_param)
 	if (ssd_pthread_id > 0) {
 		pthread_join(ssd_pthread_id, NULL);
 	}
+	if (process_recv_pthread_id > 0) {
+		pthread_join(process_recv_pthread_id, NULL);
+	}
 	pthread_mutex_destroy(&result_mutex);
 	pthread_mutex_destroy(&ssd_mutex);
 	LOG(WARNING) << "Main thread quit";
 	return rval;
 }
 
-static void *run_image_pthread(void *thread_params)
-{
-	uint64_t debug_time = 0;
-	prctl(PR_SET_NAME, "run_image_pthread");
-	while(run_flag)
-	{
-		cv::Mat src_image;
-		TIME_MEASURE_START(1);
-		image_geter.get_image(src_image);
-		save_process.save_image(src_image);
-		TIME_MEASURE_END("[run_image_pthread] cost time", 1);
-	}
-	LOG(WARNING) << "run_image_pthread quit";
-	return NULL;
-}
-
+#if defined(ONLY_SAVE_DATA)
 static void *run_tof_pthread(void *thread_params)
 {
 	uint64_t debug_time = 0;
@@ -611,6 +632,108 @@ static void *run_tof_pthread(void *thread_params)
 	return NULL;
 }
 
+static void *run_image_pthread(void *thread_params)
+{
+	uint64_t debug_time = 0;
+	prctl(PR_SET_NAME, "run_image_pthread");
+	while(run_flag)
+	{
+		cv::Mat src_image;
+		TIME_MEASURE_START(1);
+		image_geter.get_image(src_image);
+		save_process.save_image(src_image);
+		TIME_MEASURE_END("[run_image_pthread] cost time", 1);
+	}
+	LOG(WARNING) << "run_image_pthread quit";
+	return NULL;
+}
+
+#elif defined(ONLY_SEND_DATA)
+
+static void *send_tof_pthread(void *thread_params)
+{
+	uint64_t debug_time = 0;
+	unsigned char send_data[TOTAL_TOF_SIZE];
+	int length = 0;
+	long time_stamp = 0;
+	int data_type = 0, width = 0, height = 0;
+	prctl(PR_SET_NAME, "send_tof_pthread");
+	tof_geter.set_up();
+	while(run_flag)
+	{
+		TIME_MEASURE_START(1);
+		tof_geter.get_tof_Z(&send_data[31]);
+		send_data[0] = FRAME_HEADER1;
+		send_data[1] = FRAME_HEADER2;
+		send_data[2] = 0x07;
+		length = TOF_DATA_LENGTH;
+		fill_data(&send_data[3], length);
+
+		time_stamp = get_time_stamp();
+		fill_data(&send_data[7], (time_stamp >> 32) & 0xFFFFFFFF);
+		fill_data(&send_data[11], time_stamp & 0xFFFFFFFF);
+
+		data_type = 1;
+		fill_data(&send_data[15], data_type);
+
+		width = DEPTH_WIDTH;
+		fill_data(&send_data[19], width);
+
+		height = DEPTH_HEIGTH;
+		fill_data(&send_data[23], height);
+
+		tcp_process.send_data(send_data, TOTAL_TOF_SIZE);
+
+		TIME_MEASURE_END("[send_tof_pthread] cost time", 1);
+	}
+	// pthread_detach(pthread_self());
+	LOG(WARNING) << "send_tof_pthread quit";
+	return NULL;
+}
+
+static void *send_yuv_pthread(void *thread_params)
+{
+	uint64_t debug_time = 0;
+	unsigned char send_data[TOTAL_YUV_SIZE];
+	int length = 0;
+	long time_stamp = 0;
+	int data_type = 0, width = 0, height = 0;
+	prctl(PR_SET_NAME, "send_yuv_pthread");
+	while(run_flag)
+	{
+		TIME_MEASURE_START(1);
+ 		image_geter.get_yuv(&send_data[31]);
+		send_data[0] = FRAME_HEADER1;
+		send_data[1] = FRAME_HEADER2;
+		send_data[2] = 0x06;
+		length = YUV_DATA_LENGTH;
+		fill_data(&send_data[3], length);
+
+		time_stamp = get_time_stamp();
+		fill_data(&send_data[7], (time_stamp >> 32) & 0xFFFFFFFF);
+		fill_data(&send_data[11], time_stamp & 0xFFFFFFFF);
+
+		data_type = 0;
+		fill_data(&send_data[15], data_type);
+
+		width = IMAGE_WIDTH;
+		fill_data(&send_data[19], width);
+
+		height = IMAGE_HEIGHT;
+		fill_data(&send_data[23], height);
+
+		tcp_process.send_data(send_data, TOTAL_YUV_SIZE);
+
+		TIME_MEASURE_END("[send_yuv_pthread] cost time", 1);
+	}
+	// pthread_detach(pthread_self());
+	LOG(WARNING) << "send_yuv_pthread quit";
+	return NULL;
+}
+
+#endif
+
+#if defined(ONLY_SAVE_DATA) || defined(ONLY_SEND_DATA)
 static int start_all()
 {
 	int rval = 0;
@@ -620,45 +743,43 @@ static int start_all()
 		run_flag = 0;
 		LOG(ERROR) << "start tof fail!";
 	}
-	else
-	{
-		LOG(INFO) << "start tof success";
-	}
+	LOG(INFO) << "start tof success";
 	if(image_geter.start() < 0)
 	{
 		rval = -1;
 		run_flag = 0;
 		LOG(ERROR) << "start image fail!";
 	}
-	else
-	{
-		LOG(INFO) << "start image success";
-	}
+	LOG(INFO) << "start image success";
 	return rval;
 }
+#endif
 
 static void sigstop(int signal_number)
 {
 	run_lpr = 0;
 	run_flag = 0;
-	image_geter.stop();
 	tof_geter.stop();
-#ifndef ONLY_SAVE_DATA
+#if defined(ONLY_SAVE_DATA) || defined(ONLY_SEND_DATA)
+	image_geter.stop();
+#else
 	save_process.stop();
 #endif
-	LOG(INFO) << "sigstop msg, exit";
-	return;
+	net_process.stop();
+	LOG(WARNING) << "sigstop msg, exit";
 }
 
-void SignalHandle(const char* data, int size) {
+static void SignalHandle(const char* data, int size) {
     std::string str = data;
 	run_lpr = 0;
 	run_flag = 0;
-	image_geter.stop();
 	tof_geter.stop();
-#ifndef ONLY_SAVE_DATA
+#if defined(ONLY_SAVE_DATA) || defined(ONLY_SEND_DATA)
+	image_geter.stop();
+#else
 	save_process.stop();
 #endif
+    net_process.stop();
     LOG(FATAL) << str;
 }
 
@@ -684,9 +805,9 @@ int main(int argc, char **argv)
 	FLAGS_stop_logging_if_full_disk = true;
 
 	signal(SIGINT, sigstop);
-	signal(SIGQUIT, sigstop);
-	signal(SIGTERM, sigstop);
-#ifdef ONLY_SAVE_DATA
+	// signal(SIGQUIT, sigstop);
+	// signal(SIGTERM, sigstop);
+#if defined(ONLY_SAVE_DATA)
     pthread_t tof_pthread_id = 0;
 	pthread_t image_pthread_id = 0;
 	save_process.init_data();
@@ -697,16 +818,18 @@ int main(int argc, char **argv)
 		{
 			run_flag = 1;
 			rval = pthread_create(&tof_pthread_id, NULL, run_tof_pthread, NULL);
-			if(rval == 0)
+			if(rval >= 0)
 			{
 				rval = pthread_create(&image_pthread_id, NULL, run_image_pthread, NULL);
 				if(rval < 0)
 				{
+					run_flag = 0;
 					LOG(ERROR) << "create pthread fail!";
 				}
 			}
 			else
 			{
+				run_flag = 0;
 				LOG(ERROR) << "create pthread fail!";
 			}
 			if (tof_pthread_id > 0) {
@@ -722,9 +845,54 @@ int main(int argc, char **argv)
 			LOG(ERROR) << "start_all fail!";
 		}
 	}
+#elif defined(ONLY_SEND_DATA)
+	pthread_t tof_pthread_id = 0;
+	pthread_t image_pthread_id = 0;
+	if(tof_geter.open_tof() == 0 && image_geter.open_camera() == 0)
+	{
+		if(tcp_process.socket_init() >= 0 && start_all() >= 0)
+		{
+			if(tcp_process.accept_connect() >= 0)
+			{
+				run_flag = 1;
+				rval = pthread_create(&tof_pthread_id, NULL, send_tof_pthread, NULL);
+				if(rval >= 0)
+				{
+					rval = pthread_create(&image_pthread_id, NULL, send_yuv_pthread, NULL);
+					if(rval < 0)
+					{
+						run_flag = 0;
+						LOG(ERROR) << "create pthread fail!";
+					}
+				}
+				else
+				{
+					run_flag = 0;
+					LOG(ERROR) << "create pthread fail!";
+				}
+				if (tof_pthread_id > 0) {
+					pthread_join(tof_pthread_id, NULL);
+				}
+				if (image_pthread_id > 0) {
+					pthread_join(image_pthread_id, NULL);
+				}
+			}
+			LOG(WARNING) << "Main thread quit";
+		}
+		else
+		{
+			LOG(ERROR) << "start_all fail!";
+		}
+	}
 #else
 	if(tof_geter.open_tof() == 0 /* && image_geter.open_camera() == 0 */)
 	{
+		if(net_process.init_network() < 0)
+		{
+			rval = -1;
+			run_flag = 0;
+		}
+		LOG(INFO) << "net init success";
 		save_process.init_data();
 		do {
 			RVAL_OK(init_param(&G_param));

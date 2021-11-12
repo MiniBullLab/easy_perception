@@ -12,206 +12,206 @@ static std::string current_save_dir = "./";
 volatile int save_run = 0;
 volatile int video_save_run = 0; 
 
-static bool saveMapBin(const std::string& filePath, const cv::Mat& map)
-{
-	if (map.empty())
-		return false;
+// static bool saveMapBin(const std::string& filePath, const cv::Mat& map)
+// {
+// 	if (map.empty())
+// 		return false;
  
-	const char* filenamechar = filePath.c_str();
-	FILE* fpw = fopen(filenamechar, "wb");//如果没有则创建，如果存在则从头开始写
-	if (fpw == NULL)
-	{
-		//不可取fclose(fpw);
-		return false;
-	}
+// 	const char* filenamechar = filePath.c_str();
+// 	FILE* fpw = fopen(filenamechar, "wb");//如果没有则创建，如果存在则从头开始写
+// 	if (fpw == NULL)
+// 	{
+// 		//不可取fclose(fpw);
+// 		return false;
+// 	}
  
-	int chan = map.channels();//用1个字节存,通道
-	int type = map.type();//用2个字节存,类型,eg.CV_16SC2,CV_16UC1,CV_8UC1...
-	int rows = map.rows;//用4个字节存,行数
-	int cols = map.cols;//用4个字节存,列数
+// 	int chan = map.channels();//用1个字节存,通道
+// 	int type = map.type();//用2个字节存,类型,eg.CV_16SC2,CV_16UC1,CV_8UC1...
+// 	int rows = map.rows;//用4个字节存,行数
+// 	int cols = map.cols;//用4个字节存,列数
  
-	fwrite(&chan, sizeof(char), 1, fpw);
-	fwrite(&type, sizeof(char), 2, fpw);
-	fwrite(&rows, sizeof(char), 4, fpw);
-	fwrite(&cols, sizeof(char), 4, fpw);
+// 	fwrite(&chan, sizeof(char), 1, fpw);
+// 	fwrite(&type, sizeof(char), 2, fpw);
+// 	fwrite(&rows, sizeof(char), 4, fpw);
+// 	fwrite(&cols, sizeof(char), 4, fpw);
  
-	if (chan == 3)
-	{
-		if (type == CV_8UC3)//8U代表8位无符号整形,C3代表三通道
-		{
-			uchar* pData = (uchar*)map.data;
-			for (int i = 0; i < rows * cols; i++)
-			{
-				fwrite(&pData[i * 3], sizeof(uchar), 1, fpw);
-				fwrite(&pData[i * 3 + 1], sizeof(uchar), 1, fpw);
-				fwrite(&pData[i * 3 + 2], sizeof(uchar), 1, fpw);
-			}
-		}
-		else
-		{
-			fclose(fpw);
-			return false;
-		}
-	}
-	else if (chan == 2)
-	{
-		if (type == CV_8UC2)
-		{
-			uchar* pData = (uchar*)map.data;
-			for (int i = 0; i < rows * cols; i++)
-			{
-				fwrite(&pData[i * 2], sizeof(uchar), 1, fpw);
-				fwrite(&pData[i * 2 + 1], sizeof(uchar), 1, fpw);
-			}
-		}
-		else if (type == CV_16SC2)//16S代表16位有符号整形,C2代表双通道
-		{
-			short* pData = (short*)map.data;
-			for (int i = 0; i < rows * cols; i++)
-			{
-				fwrite(&pData[i * 2], sizeof(short), 1, fpw);
-				fwrite(&pData[i * 2 + 1], sizeof(short), 1, fpw);
-			}
-		}
-		else
-		{
-			fclose(fpw);
-			return false;
-		}
-	}
-	else if (chan == 1)
-	{
-		if (type == CV_8UC1)
-		{
-			uchar* pData = (uchar*)map.data;
-			for (int i = 0; i < rows * cols; i++)
-			{
-				fwrite(&pData[i], sizeof(uchar), 1, fpw);
-			}
-		}
-		else if (type == CV_16UC1)//16U代表16位无符号整形,C1代表单通道
-		{
-			ushort* pData = (ushort*)map.data;
-			for (int i = 0; i < rows * cols; i++)
-			{
-				fwrite(&pData[i], sizeof(ushort), 1, fpw);
-			}
-		}
-		else
-		{
-			fclose(fpw);
-			return false;
-		}
-	}
-	else
-	{
-		fclose(fpw);
-		return false;
-	}
+// 	if (chan == 3)
+// 	{
+// 		if (type == CV_8UC3)//8U代表8位无符号整形,C3代表三通道
+// 		{
+// 			uchar* pData = (uchar*)map.data;
+// 			for (int i = 0; i < rows * cols; i++)
+// 			{
+// 				fwrite(&pData[i * 3], sizeof(uchar), 1, fpw);
+// 				fwrite(&pData[i * 3 + 1], sizeof(uchar), 1, fpw);
+// 				fwrite(&pData[i * 3 + 2], sizeof(uchar), 1, fpw);
+// 			}
+// 		}
+// 		else
+// 		{
+// 			fclose(fpw);
+// 			return false;
+// 		}
+// 	}
+// 	else if (chan == 2)
+// 	{
+// 		if (type == CV_8UC2)
+// 		{
+// 			uchar* pData = (uchar*)map.data;
+// 			for (int i = 0; i < rows * cols; i++)
+// 			{
+// 				fwrite(&pData[i * 2], sizeof(uchar), 1, fpw);
+// 				fwrite(&pData[i * 2 + 1], sizeof(uchar), 1, fpw);
+// 			}
+// 		}
+// 		else if (type == CV_16SC2)//16S代表16位有符号整形,C2代表双通道
+// 		{
+// 			short* pData = (short*)map.data;
+// 			for (int i = 0; i < rows * cols; i++)
+// 			{
+// 				fwrite(&pData[i * 2], sizeof(short), 1, fpw);
+// 				fwrite(&pData[i * 2 + 1], sizeof(short), 1, fpw);
+// 			}
+// 		}
+// 		else
+// 		{
+// 			fclose(fpw);
+// 			return false;
+// 		}
+// 	}
+// 	else if (chan == 1)
+// 	{
+// 		if (type == CV_8UC1)
+// 		{
+// 			uchar* pData = (uchar*)map.data;
+// 			for (int i = 0; i < rows * cols; i++)
+// 			{
+// 				fwrite(&pData[i], sizeof(uchar), 1, fpw);
+// 			}
+// 		}
+// 		else if (type == CV_16UC1)//16U代表16位无符号整形,C1代表单通道
+// 		{
+// 			ushort* pData = (ushort*)map.data;
+// 			for (int i = 0; i < rows * cols; i++)
+// 			{
+// 				fwrite(&pData[i], sizeof(ushort), 1, fpw);
+// 			}
+// 		}
+// 		else
+// 		{
+// 			fclose(fpw);
+// 			return false;
+// 		}
+// 	}
+// 	else
+// 	{
+// 		fclose(fpw);
+// 		return false;
+// 	}
  
-	fclose(fpw);
-	return true;
-}
+// 	fclose(fpw);
+// 	return true;
+// }
  
-static bool loadMapBin(const std::string& filePath, cv::Mat& map)
-{
-	const char* filenamechar = filePath.c_str();
-	FILE* fpr = fopen(filenamechar, "rb");
-	if (fpr == NULL)
-	{
-		//不可取fclose(fpr);
-		return false;
-	}
+// static bool loadMapBin(const std::string& filePath, cv::Mat& map)
+// {
+// 	const char* filenamechar = filePath.c_str();
+// 	FILE* fpr = fopen(filenamechar, "rb");
+// 	if (fpr == NULL)
+// 	{
+// 		//不可取fclose(fpr);
+// 		return false;
+// 	}
  
-	int chan = 0;
-	int type = 0;
-	int rows = 0;
-	int cols = 0;
+// 	int chan = 0;
+// 	int type = 0;
+// 	int rows = 0;
+// 	int cols = 0;
  
-	fread(&chan, sizeof(char), 1, fpr);//1个字节存,通道
-	fread(&type, sizeof(char), 2, fpr);//2个字节存,类型,eg.CV_16SC2,CV_16UC1,CV_8UC1...
-	fread(&rows, sizeof(char), 4, fpr);//4个字节存,行数
-	fread(&cols, sizeof(char), 4, fpr);//4个字节存,列数
+// 	fread(&chan, sizeof(char), 1, fpr);//1个字节存,通道
+// 	fread(&type, sizeof(char), 2, fpr);//2个字节存,类型,eg.CV_16SC2,CV_16UC1,CV_8UC1...
+// 	fread(&rows, sizeof(char), 4, fpr);//4个字节存,行数
+// 	fread(&cols, sizeof(char), 4, fpr);//4个字节存,列数
  
-	map = cv::Mat::zeros(rows, cols, type);
+// 	map = cv::Mat::zeros(rows, cols, type);
  
-	if (chan == 3)
-	{
-		if (type == CV_8UC3)//8U代表8位无符号整形,C3代表三通道
-		{
-			uchar* pData = (uchar*)map.data;
-			for (int i = 0; i < rows * cols; i++)
-			{
-				fread(&pData[i * 3], sizeof(uchar), 1, fpr);
-				fread(&pData[i * 3 + 1], sizeof(uchar), 1, fpr);
-				fread(&pData[i * 3 + 2], sizeof(uchar), 1, fpr);
-			}
-		}
-		else
-		{
-			fclose(fpr);
-			return false;
-		}
-	}
-	else if (chan == 2)
-	{
-		if (type == CV_8UC2)
-		{
-			uchar* pData = (uchar*)map.data;
-			for (int i = 0; i < rows * cols; i++)
-			{
-				fread(&pData[i * 2], sizeof(uchar), 1, fpr);
-				fread(&pData[i * 2 + 1], sizeof(uchar), 1, fpr);
-			}
-		}
-		else if (type == CV_16SC2)//16S代表16位有符号整形,C2代表双通道
-		{
-			short* pData = (short*)map.data;
-			for (int i = 0; i < rows * cols; i++)
-			{
-				fread(&pData[i * 2], sizeof(short), 1, fpr);
-				fread(&pData[i * 2 + 1], sizeof(short), 1, fpr);
-			}
-		}
-		else
-		{
-			fclose(fpr);
-			return false;
-		}
-	}
-	else if (chan == 1)
-	{
-		if (type == CV_8UC1)
-		{
-			uchar* pData = (uchar*)map.data;
-			for (int i = 0; i < rows * cols; i++)
-			{
-				fread(&pData[i], sizeof(uchar), 1, fpr);
-			}
-		}
-		else if (type == CV_16UC1)//16U代表16位无符号整形,C1代表单通道
-		{
-			ushort* pData = (ushort*)map.data;
-			for (int i = 0; i < rows * cols; i++)
-			{
-				fread(&pData[i], sizeof(ushort), 1, fpr);
-			}
-		}
-		else
-		{
-			fclose(fpr);
-			return false;
-		}
-	}
-	else
-	{
-		fclose(fpr);
-		return false;
-	}
+// 	if (chan == 3)
+// 	{
+// 		if (type == CV_8UC3)//8U代表8位无符号整形,C3代表三通道
+// 		{
+// 			uchar* pData = (uchar*)map.data;
+// 			for (int i = 0; i < rows * cols; i++)
+// 			{
+// 				fread(&pData[i * 3], sizeof(uchar), 1, fpr);
+// 				fread(&pData[i * 3 + 1], sizeof(uchar), 1, fpr);
+// 				fread(&pData[i * 3 + 2], sizeof(uchar), 1, fpr);
+// 			}
+// 		}
+// 		else
+// 		{
+// 			fclose(fpr);
+// 			return false;
+// 		}
+// 	}
+// 	else if (chan == 2)
+// 	{
+// 		if (type == CV_8UC2)
+// 		{
+// 			uchar* pData = (uchar*)map.data;
+// 			for (int i = 0; i < rows * cols; i++)
+// 			{
+// 				fread(&pData[i * 2], sizeof(uchar), 1, fpr);
+// 				fread(&pData[i * 2 + 1], sizeof(uchar), 1, fpr);
+// 			}
+// 		}
+// 		else if (type == CV_16SC2)//16S代表16位有符号整形,C2代表双通道
+// 		{
+// 			short* pData = (short*)map.data;
+// 			for (int i = 0; i < rows * cols; i++)
+// 			{
+// 				fread(&pData[i * 2], sizeof(short), 1, fpr);
+// 				fread(&pData[i * 2 + 1], sizeof(short), 1, fpr);
+// 			}
+// 		}
+// 		else
+// 		{
+// 			fclose(fpr);
+// 			return false;
+// 		}
+// 	}
+// 	else if (chan == 1)
+// 	{
+// 		if (type == CV_8UC1)
+// 		{
+// 			uchar* pData = (uchar*)map.data;
+// 			for (int i = 0; i < rows * cols; i++)
+// 			{
+// 				fread(&pData[i], sizeof(uchar), 1, fpr);
+// 			}
+// 		}
+// 		else if (type == CV_16UC1)//16U代表16位无符号整形,C1代表单通道
+// 		{
+// 			ushort* pData = (ushort*)map.data;
+// 			for (int i = 0; i < rows * cols; i++)
+// 			{
+// 				fread(&pData[i], sizeof(ushort), 1, fpr);
+// 			}
+// 		}
+// 		else
+// 		{
+// 			fclose(fpr);
+// 			return false;
+// 		}
+// 	}
+// 	else
+// 	{
+// 		fclose(fpr);
+// 		return false;
+// 	}
  
-	fclose(fpr);
-	return true;
-}
+// 	fclose(fpr);
+// 	return true;
+// }
 
 // static void *save_video_pthread(void* save_data)
 // {
@@ -289,7 +289,6 @@ static void *save_image_pthread(void* save_data)
         else
         {
             LOG(ERROR) << "save src image empty: " << filename_image.str();
-            break;
         }
         frame_number++;
         image_buffer.readpos++;  
@@ -323,7 +322,6 @@ static void *save_tof_pthread(void* save_data)
         else
         {
             LOG(ERROR) << "save depth map empty: " << filename_tof.str();
-            break;
         }
         frame_number++;
         tof_buffer.readpos++;  

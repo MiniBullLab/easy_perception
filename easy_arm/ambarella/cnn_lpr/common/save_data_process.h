@@ -13,9 +13,7 @@
 #include "cnn_lpr/drivers/tof_316_acquisition.h"
 #include "cnn_lpr/drivers/image_acquisition.h"
 
-#define ONLY_SAVE_DATA
-
-#ifdef ONLY_SAVE_DATA
+#if defined(ONLY_SAVE_DATA) || defined(ONLY_SEND_DATA)
 #define SAVE_TOF_BUFFER_SIZE (1)
 #define SAVE_IMAGE_BUFFER_SIZE (1)
 #else
