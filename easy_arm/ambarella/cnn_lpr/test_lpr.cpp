@@ -318,10 +318,17 @@ static void *process_recv_pthread(void *thread_params)
 	prctl(PR_SET_NAME, "process_recv_pthread");
 	while(run_flag)
 	{
-		net_process.process_recv();
-		usleep(50000);
+		int result = net_process.process_recv();
+		if(result == 200)
+		{
+			run_lpr = 0;
+			run_flag = 0;
+		}
 	}
-	LOG(WARNING) << "process_recv_pthread quit";
+	tof_geter.stop();
+	save_process.stop();
+    net_process.stop();
+	LOG(WARNING) << "process_recv_pthread quit！";
 	return NULL;
 }
 
@@ -600,12 +607,15 @@ static int start_all(global_control_param_t *G_param)
 
 	if (lpr_pthread_id > 0) {
 		pthread_join(lpr_pthread_id, NULL);
+		lpr_pthread_id = 0;
 	}
 	if (ssd_pthread_id > 0) {
 		pthread_join(ssd_pthread_id, NULL);
+		ssd_pthread_id = 0;
 	}
 	if (process_recv_pthread_id > 0) {
 		pthread_join(process_recv_pthread_id, NULL);
+		process_recv_pthread_id = 0;
 	}
 	pthread_mutex_destroy(&result_mutex);
 	pthread_mutex_destroy(&ssd_mutex);

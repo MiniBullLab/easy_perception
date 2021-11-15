@@ -23,41 +23,6 @@ static int parseRecv(const std::string &message)
 	return result;
 }
 
-static void * upd_recv_msg(void *arg)
-{
-	int ret = 0;
-	int *socket_fd = (int *)arg;//通信的socket
-	struct sockaddr_in  src_addr = {0};  //用来存放对方(信息的发送方)的IP地址信息
-	int len = sizeof(src_addr);	//地址信息的大小
-	char msg[1024] = {0};//消息缓冲区
-	prctl(PR_SET_NAME, "upd_recv_pthread");
-	while(net_run_flag > 0)
-	{
-		ret = recvfrom(*socket_fd, msg, sizeof(msg), 0, (struct sockaddr *)&src_addr, (socklen_t*)len);
-		if(ret >= 0)
-		{
-			struct timespec ts;
-			std::string tmp_str = msg;
-			LOG(WARNING) << "IP:" << inet_ntoa(src_addr.sin_addr) << " port:" << ntohs(src_addr.sin_port);
-			LOG(WARNING) << "msg:" << msg;
-			clock_gettime(CLOCK_REALTIME, &ts);
-			ts.tv_sec += 1;
-			ret = sem_timedwait(&sem_get, &ts);
-			if(ret < 0) {
-				LOG(ERROR) << "sem_timewait timeout";
-				continue;
-			}
-			recv_code = parseRecv(tmp_str);
-			sem_post(&sem_put);
-			memset(msg, 0, sizeof(msg));//清空存留消息	
-		}
-	}
-	//关闭通信socket
-	close(*socket_fd);
-	LOG(WARNING) << "upd recv msg thread quit!";
-	return NULL;
-}
-
 static void* heart_send_pthread(void* arg)
 {
 	int rval = 0;
@@ -85,6 +50,43 @@ static void* heart_send_pthread(void* arg)
 	sendto(*broadcast_socket_fd, buf, strlen(buf), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)); 
 	close(*broadcast_socket_fd);
 	LOG(WARNING) << "upd broadcast thread quit!";
+	return NULL;
+}
+
+static void * upd_recv_msg(void *arg)
+{
+	int ret = 0;
+	int *socket_fd = (int *)arg;//通信的socket
+	struct sockaddr_in  src_addr = {0};  //用来存放对方(信息的发送方)的IP地址信息
+	int len = sizeof(struct sockaddr_in);	//地址信息的大小
+	char msg_buffer[1024] = {0};//消息缓冲区
+	prctl(PR_SET_NAME, "upd_recv_pthread");
+	while(net_run_flag > 0)
+	{
+		ret = recvfrom(*socket_fd, msg_buffer, sizeof(msg_buffer), 0, (struct sockaddr *)(&src_addr), (socklen_t*)(&len));
+		if(ret >= 0)
+		{
+			struct timespec ts;
+			std::string tmp_str = msg_buffer;
+			LOG(WARNING) << "IP:" << inet_ntoa(src_addr.sin_addr) << " port:" << ntohs(src_addr.sin_port);
+			LOG(WARNING) << "msg:" << msg_buffer;
+			clock_gettime(CLOCK_REALTIME, &ts);
+			ts.tv_sec += 1;
+			ts.tv_nsec = 0;
+			ret = sem_timedwait(&sem_get, &ts);
+			if(ret < 0) {
+				LOG(ERROR) << "sem_timewait timeout";
+				continue;
+			}
+			recv_code = parseRecv(tmp_str);
+			std::cout << "recv_code:" << recv_code << std::endl;
+			sem_post(&sem_put);
+			memset(msg_buffer, 0, sizeof(msg_buffer));//清空存留消息	
+		}
+	}
+	//关闭通信socket
+	close(*socket_fd);
+	LOG(WARNING) << "upd recv msg thread quit!";
 	return NULL;
 }
 
@@ -131,7 +133,7 @@ int NetProcess::init_network()
 	int on = 1; //开启
 	struct sockaddr_in  local_addr = {0};
 	struct timeval timeout;
-	udp_socket_fd = socket(AF_INET,SOCK_DGRAM, 0);
+	udp_socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if(udp_socket_fd < 0)
 	{
 		LOG(ERROR) << "creat socket fail";
@@ -139,7 +141,7 @@ int NetProcess::init_network()
 		net_run_flag = 0;
 	}
     timeout.tv_sec = 0;//秒
-    timeout.tv_usec = 100000;//微秒
+    timeout.tv_usec = 600000;//微秒
     if (setsockopt(udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1) {
 		LOG(ERROR) << "setsockopt failed";
 		rval = -1;
@@ -157,9 +159,13 @@ int NetProcess::init_network()
 		rval = -1;
 		net_run_flag = 0;
 	}
+	else
+	{
+		LOG(WARNING) << "bind success!";
+	}
 
 	broadcast_socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
-	if (broadcast_socket_fd == -1)
+	if (broadcast_socket_fd < 0)
     {
 		LOG(ERROR) << "create socket failed ! error message:" << strerror(errno);
         rval = -1;
@@ -173,11 +179,12 @@ int NetProcess::init_network()
 		rval = -1;
 		net_run_flag = 0;
 	}
+
 	signal(SIGPIPE, SIG_IGN);
 
 	pthread_mutex_init(&send_mutex, NULL);
 	sem_init(&sem_put, 0, 0);
-	sem_init(&sem_get, 0, 0);
+	sem_init(&sem_get, 0, 1);
 	LOG(WARNING) << "socket init success!";
 	return rval;
 }
@@ -215,6 +222,8 @@ int NetProcess::stop()
 
     LOG(WARNING) << "stop network";
 
+	sem_post(&sem_put);
+
 	if (heart_pthread_id > 0) {
 		pthread_join(heart_pthread_id, NULL);
         heart_pthread_id = 0;
@@ -229,15 +238,23 @@ int NetProcess::stop()
 
 int NetProcess::process_recv()
 {
-	if(sem_trywait(&sem_put) == 0)
+	int result = 0;
+	if(sem_wait(&sem_put) == 0)
 	{
 		if(recv_code == 100)
 		{
 			send_log_path();
 		}
+		else if(recv_code == 101)
+		{
+			send_save_data();
+		}
+		result = recv_code;
+		recv_code = -1;
 		sem_post(&sem_get);
+		LOG(WARNING) << result <<": process recv finish!";
 	}
-	return 0;
+	return result;
 }
 
 int NetProcess::send_result(const std::string &lpr_result, const int code)
@@ -260,12 +277,30 @@ int NetProcess::send_log_path()
 {
 	std::vector<std::string> log_list;
 	std::string log_dir = "/data/glog_file/";
-	ListImages(log_dir, log_list);
+	ListPath(log_dir, log_list);
 	std::stringstream temp_str;
 	temp_str << 9 << "|";
 	for (size_t index = 0; index < log_list.size(); index++) {
         temp_str << log_dir << log_list[index] << "|";
 		std::cout << log_list[index] << std::endl;
+	}
+	pthread_mutex_lock(&send_mutex);
+	sendto(udp_socket_fd, temp_str.str().c_str(), strlen(temp_str.str().c_str()), \
+		0, (struct sockaddr *)&dest_addr,sizeof(dest_addr));
+	pthread_mutex_unlock(&send_mutex);
+	return 0;
+}
+
+int NetProcess::send_save_data()
+{
+	std::vector<std::string> data_list;
+	std::string save_dir = "/data/save_data/";
+	ListPath(save_dir, data_list);
+	std::stringstream temp_str;
+	temp_str << 10 << "|";
+	for (size_t index = 0; index < data_list.size(); index++) {
+        temp_str << save_dir << data_list[index] << "|";
+		std::cout << data_list[index] << std::endl;
 	}
 	pthread_mutex_lock(&send_mutex);
 	sendto(udp_socket_fd, temp_str.str().c_str(), strlen(temp_str.str().c_str()), \

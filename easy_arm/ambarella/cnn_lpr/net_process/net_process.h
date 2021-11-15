@@ -37,6 +37,8 @@ public:
 
     int send_log_path();
 
+    int send_save_data();
+
 private:
 
     

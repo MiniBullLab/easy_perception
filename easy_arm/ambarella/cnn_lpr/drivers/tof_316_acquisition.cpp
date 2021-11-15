@@ -1450,7 +1450,8 @@ int TOF316Acquisition::stop()
 	int ret = 0;
 	run_tof = 0;
 	if (pthread_id > 0) {
-		pthread_cond_signal(&tof_buffer.notfull);  
+		pthread_cond_signal(&tof_buffer.notfull);
+		pthread_cond_signal(&tof_buffer.notempty);  
 		pthread_mutex_unlock(&tof_buffer.lock);
 		pthread_join(pthread_id, NULL);
 		pthread_id = 0;
@@ -1488,7 +1489,7 @@ void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map)
 		{  
 			pthread_cond_wait(&tof_buffer.notempty, &tof_buffer.lock);  
 		}
-		for(int i = 0; i < MAX_POINT_CLOUD; i++)
+		for(int i = 0; i < MAX_POINT_CLOUD && run_tof > 0; i++)
 		{
 			if (tof_buffer.buffer_z[tof_buffer.readpos][i] > max_dst || \
 					tof_buffer.buffer_z[tof_buffer.readpos][i] < 0.8f || \
