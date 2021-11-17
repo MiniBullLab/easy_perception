@@ -12,6 +12,7 @@ file(GLOB CNN_RUNTIME_SRCS
 	"${PROJECT_SOURCE_DIR}/pose/*.cpp"
 	"${PROJECT_SOURCE_DIR}/segment/*.cpp"
 	"${PROJECT_SOURCE_DIR}/rec_text/*.cpp"
+    "${PROJECT_SOURCE_DIR}/one_class/*.cpp"
 	)
 
 #build cnn_runtime library
@@ -21,6 +22,7 @@ target_link_libraries(cnn_runtime
     opencv_imgcodecs
     opencv_imgproc
     opencv_highgui 
+    opencv_ml
     jpeg
     png
     z
@@ -35,6 +37,8 @@ install(FILES det2d/denet.h DESTINATION include/cnn_runtime/det2d ${CMAKE_INSTAL
 install(FILES segment/segnet.h DESTINATION include/cnn_runtime/segment ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES pose/posenet.h DESTINATION include/cnn_runtime/pose ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES rec_text/textnet.h DESTINATION include/cnn_runtime/rec_text ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES one_class/one_class_net.h DESTINATION include/cnn_runtime/one_class ${CMAKE_INSTALL_INCLUDEDIR})
+
 #install(DIRECTORY "${amba_arm_SOURCE_DIR}/cnn_runtime/classify" DESTINATION include/cnn_runtime ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
 #install(DIRECTORY "${amba_arm_SOURCE_DIR}/cnn_runtime/det2d" DESTINATION include/cnn_runtime ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
 #install(DIRECTORY "${amba_arm_SOURCE_DIR}/cnn_runtime/segment" DESTINATION include/cnn_runtime ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")

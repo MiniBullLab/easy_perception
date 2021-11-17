@@ -5,9 +5,6 @@
 #include "cnn_runtime/pose/openpose_postprocess.h"
 #include <iostream>
 
-#define INPUT_WIDTH (192)
-#define INPUT_HEIGHT (192)
-
 const static int nPoints = 18;
 
 const static std::vector<std::pair<int,int>> posePairs1 = {
@@ -57,13 +54,22 @@ std::vector<std::vector<cv::Point>> PoseNet::run(const cv::Mat &srcImage)
     cv::Size srcSize = cv::Size(srcImage.cols, srcImage.rows);
     cv::Size inputSize = get_input_size(&nnctrl_ctx);
     float *tempOutput[1] = {NULL};
-    preprocess(&nnctrl_ctx, srcImage, 0);
+    cv::Mat bgrImage;
+    if(srcImage.channels() == 1)
+    {
+        cv::cvtColor(srcImage, bgrImage, cv::COLOR_GRAY2BGR);
+    }
+    else
+    {
+        bgrImage = srcImage;
+    }
+    preprocess(&nnctrl_ctx, bgrImage, 0);
     cnn_run(&nnctrl_ctx, tempOutput, 1);
     int output_c = nnctrl_ctx.net.net_out.out_desc[0].dim.depth;
     int output_h = nnctrl_ctx.net.net_out.out_desc[0].dim.height;
     int output_w = nnctrl_ctx.net.net_out.out_desc[0].dim.width;
     int output_p = nnctrl_ctx.net.net_out.out_desc[0].dim.pitch / 4;
-    int layer_count = output_h * output_w;
+    int layer_count = output_h * output_p;
     float *scoreAddr = tempOutput[0];
 
     std::cout << "output size: " << "--output_c: " << output_c << "--output_h: " << output_h << "--output_w: " \
@@ -74,9 +80,9 @@ std::vector<std::vector<cv::Point>> PoseNet::run(const cv::Mat &srcImage)
     {
         cv::Mat resizedPart;
         cv::Mat part(output_h, output_w, CV_32F, cv::Scalar(255));
-        memcpy(part.data, scoreAddr, output_h *  output_p);
+        memcpy(part.data, scoreAddr, output_h *  output_p * sizeof(float));
         scoreAddr = scoreAddr + layer_count;
-        cv::resize(part, resizedPart, cv::Size(INPUT_WIDTH, INPUT_HEIGHT), cv::INTER_NEAREST);
+        cv::resize(part, resizedPart, inputSize, cv::INTER_NEAREST);
         netOutputParts.push_back(resizedPart);
     }
 
@@ -88,15 +94,20 @@ std::vector<std::vector<cv::Point>> PoseNet::run(const cv::Mat &srcImage)
     return result;
 }
 
-int PoseNet::show(cv::Mat &image, const std::vector<std::vector<cv::Point>> &result)
+int PoseNet::show(cv::Mat &image, const std::vector<std::vector<cv::Point>> &result,
+                         const int pointSize, const int lineWidth)
 {
+    if(image.channels() == 1)
+    {
+        cv::cvtColor(image, image, cv::COLOR_GRAY2BGR);
+    }
     for(size_t i = 0; i < nPoints;++i){
         for(size_t j = 0; j < result.size(); ++j){
             const cv::Point& kp = result[j][i];
             if(kp.x < 0 || kp.y < 0){
                     continue;
             }
-            cv::circle(image, kp, 20, colors[i], -1, cv::LINE_AA);
+            cv::circle(image, kp, pointSize, colors[i], -1, cv::LINE_AA);
         }
     }
 
@@ -108,20 +119,22 @@ int PoseNet::show(cv::Mat &image, const std::vector<std::vector<cv::Point>> &res
             if(kpA.x < 0 || kpA.y < 0 || kpB.x < 0 || kpB.y < 0){
                 continue;
             }
-            cv::line(image, kpA, kpB, colors[i], 10, cv::LINE_AA);
+            cv::line(image, kpA, kpB, colors[i], lineWidth, cv::LINE_AA);
         }
     }
+    return 0;
 }
 
 std::vector<std::vector<cv::Point>> PoseNet::postprocess(const cv::Size src_size, const cv::Size dst_size, \
                                                          const std::vector<cv::Mat>& netOutputParts)
 {
+    float scale_w = static_cast<float>(src_size.width) / dst_size.width;
+    float scale_h = static_cast<float>(src_size.height) / dst_size.height;
     std::vector<std::vector<cv::Point>> result;
     std::vector<std::vector<KeyPoint>> tempResult;
-    getOpenposeResult(netOutputParts, tempResult);
-    float scale_w = src_size.width / INPUT_WIDTH;
-    float scale_h = src_size.height / INPUT_HEIGHT;
+    tempResult.clear();
     result.clear();
+    getOpenposeResult(netOutputParts, tempResult);
     for(size_t n  = 0; n < tempResult.size();++n)
     {
         std::vector<cv::Point> keypoints;
@@ -143,12 +156,15 @@ std::vector<std::vector<cv::Point>> PoseNet::postprocess(const cv::Size src_size
             if(tempResult[n][p].probability < 0)
             {
                 keypoints.push_back(cv::Point(-1, -1));
+                // std::cout << "pose point: -1, -1" << std::endl;
             }
             else
             {
                 keypoints.push_back(cv::Point(x, y));
+                // std::cout << "pose point:" << x << " " << y << std::endl;
             }
         }
+        // std::cout << "pose count:" << keypoints.size() << std::endl;
         result.push_back(keypoints);
     }
     return result;

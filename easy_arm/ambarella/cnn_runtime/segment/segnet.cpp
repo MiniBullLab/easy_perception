@@ -56,12 +56,12 @@ cv::Mat SegNet::run(const cv::Mat &srcImage)
 
     for (int h = 0; h < output_h; h++)
     {
-        memcpy(segnetOutput + h * output_w, tempOutput[0] + h * output_p, output_p * sizeof(float));
+        memcpy(segnetOutput + h * output_w, tempOutput[0] + h * output_p, output_w * sizeof(float));
     }
 
     // std::ofstream ouF;
     // ouF.open("./score.bin", std::ofstream::binary);
-    // ouF.write(reinterpret_cast<const char*>(classnetOutput), sizeof(float) * CLASS_NUM);
+    // ouF.write(reinterpret_cast<const char*>(tempOutput[0]), sizeof(float) * CLASS_NUM);
     // ouF.close();
     postprocess(segnetOutput, 0, srcSize, this->inputSize, result);
     return result;

@@ -118,6 +118,8 @@ void camera_infer()
 	HDMIDevice hdmi;
 	hdmi.HDMIInit();
 
+    std::cout << "HDMI init success" << std::endl;
+
     signal(SIGINT, sig_int_handler);
     signal(SIGTERM, sig_int_handler);
     signal(SIGKILL, sig_int_handler);
@@ -133,7 +135,9 @@ void camera_infer()
             break;
         }
 #else
+        // std::cout << "grap capture" << std::endl;
 		src_image = cam.grabImage();
+        // std::cout << "image size:" << src_image.channels() << std::endl;
 #endif
         time_end = get_current_time();
 		double dt_grab = (time_end - time_start) / 1000.0;
@@ -166,10 +170,10 @@ void camera_infer()
 int main()
 {
     std::cout << "start..." << std::endl;
-    // const std::string image_dir = "./pose_img/";
-    // const std::string image_txt_path = "img.txt";
-    // image_txt_infer(image_dir, image_txt_path);
-    camera_infer();
+    const std::string image_dir = "./images/";
+    const std::string image_txt_path = "img.txt";
+    image_txt_infer(image_dir, image_txt_path);
+    // camera_infer();
     std::cout << "End of game!!!" << std::endl;
     return 0;
 }

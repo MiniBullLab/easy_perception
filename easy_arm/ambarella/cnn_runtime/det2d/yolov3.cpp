@@ -6,6 +6,31 @@
 #include "cnn_runtime/cnn_common/cnn_function.h"
 #include "cnn_runtime/cnn_common/blob_define.h"
 
+#define YOLO_NET_IN_HEIGHT (416)
+#define YOLO_NET_IN_WIDTH (416)
+#define g_anchorCnt (3)
+#define NMS_THRESHOLD (0.45f)
+#define CONF (0.24f)
+
+const std::vector<float> g_anchors{8.95, 8.57, 12.43, 26.71, 19.71, 14.43,
+                                 26.36, 58.52, 36.09, 25.55, 64.42, 42.90,
+                                 96.44, 79.10, 158.37, 115.59, 218.65, 192.90};
+// const std::vector<float> g_anchors{10,13, 16,30, 33,23,
+//                                   30,61, 62,45, 59,119, 
+//                                   116,90, 156,198, 373,326};
+
+
+const int g_layer0_w = (YOLO_NET_IN_WIDTH / 32); //32)
+const int g_layer0_h = (YOLO_NET_IN_HEIGHT / 32);   //32)
+
+const int g_layer1_w = (YOLO_NET_IN_WIDTH / 16);     //16)
+const int g_layer1_h = (YOLO_NET_IN_HEIGHT / 16);    //16)
+
+const int g_layer2_w = (YOLO_NET_IN_WIDTH / 8);     //8)
+const int g_layer2_h = (YOLO_NET_IN_HEIGHT / 8);    //8)
+
+static int g_classificationCnt = 1;
+
 #define IDX(o) (entry_index(o,c,w,h,lWidth,lHeight))
 
 
@@ -155,9 +180,11 @@ Parammeter:
 
 Return: detection objects
 **************************************/
-std::vector<std::vector<float>> yolo_run(float* node0, float* node1, float* node2)
+std::vector<std::vector<float>> yolo_run(const int classNumber, float* node0, float* node1, float* node2)
 {
     std::vector<std::vector<float>> boxes;
+
+    g_classificationCnt = classNumber;
 
     detect(boxes, node0, g_layer0_h, g_layer0_w, 2, YOLO_NET_IN_HEIGHT, YOLO_NET_IN_WIDTH);
     detect(boxes, node1, g_layer1_h, g_layer1_w, 1, YOLO_NET_IN_HEIGHT, YOLO_NET_IN_WIDTH);

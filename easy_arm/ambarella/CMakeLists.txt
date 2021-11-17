@@ -24,10 +24,10 @@ include(cmake/ambacv25_3_dependencies.cmake)
 message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
 
 #build cnn_runtime
-# add_subdirectory(cnn_runtime)
+add_subdirectory(cnn_runtime)
 
 #build test cnn
-# add_subdirectory(cnn_runtime/tests)
+#add_subdirectory(cnn_runtime/tests)
 
 #build cnn_lpr
 add_subdirectory(cnn_lpr)

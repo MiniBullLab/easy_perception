@@ -1,9 +1,9 @@
 #ifndef CNN_DATA_STRUCTURE_H
 #define CNN_DATA_STRUCTURE_H
 
-#include "cavalry_ioctl.h"
-#include "cavalry_mem.h"
-#include "nnctrl.h"
+#include <cavalry_ioctl.h>
+#include <cavalry_mem.h>
+#include <nnctrl.h>
 
 #define MAX_FILE_NAME_LEN			(256)
 

@@ -10,7 +10,7 @@ public:
     DeNet();
     ~DeNet();
     int init(const std::string &modelPath, const std::vector<std::string> &inputName, 
-             const std::vector<std::string> &outputName, const float threshold=0.1f);
+             const std::vector<std::string> &outputName, const int classNumber, const float threshold=0.1f);
     std::vector<std::vector<float>> run(const cv::Mat &srcImage);
 
 private:
@@ -20,4 +20,5 @@ private:
     cavalry_ctx_t cavalry_ctx;
     nnctrl_ctx_t nnctrl_ctx;
     float threshold;
+    int classNumber;
 };

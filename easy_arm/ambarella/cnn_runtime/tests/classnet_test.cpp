@@ -5,8 +5,9 @@
 #include "cnn_runtime/classify/classnet.h"
 
 const static std::string model_path = "./classnet.bin";
-const static std::string input_name = "0";
-const static std::string output_name = "198";
+const static std::string input_name = "cls_input";
+const static std::string output_name = "cls_output";
+const static int class_num = 100;
 
 static void image_dir_infer(const std::string &image_dir){
     unsigned long time_start, time_end;
@@ -15,7 +16,7 @@ static void image_dir_infer(const std::string &image_dir){
     int class_idx = -1;
     cv::Mat src_img;
     ClassNet classnet_process;
-    if(classnet_process.init(model_path, input_name, output_name) < 0)
+    if(classnet_process.init(model_path, input_name, output_name, class_num) < 0)
     {
         std::cout << "ClassNet init fail!" << std::endl;
         return;
@@ -46,7 +47,7 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
     std::string line_data;
     cv::Mat src_img;
     ClassNet classnet_process;
-    if(classnet_process.init(model_path, input_name, output_name) < 0)
+    if(classnet_process.init(model_path, input_name, output_name, class_num) < 0)
     {
         std::cout << "ClassNet init fail!" << std::endl;
         return;
