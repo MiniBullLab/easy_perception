@@ -28,7 +28,7 @@ file(GLOB LPR_SRCS
     "${PROJECT_SOURCE_DIR}/common/*.cpp"
     "${PROJECT_SOURCE_DIR}/image/*.cpp"
     "${PROJECT_SOURCE_DIR}/led/*.cpp"
-    "${PROJECT_SOURCE_DIR}/net_process/*.cpp"
+    "${PROJECT_SOURCE_DIR}/network/*.cpp"
     "${PROJECT_SOURCE_DIR}/lpr/*.cpp"
 	"${PROJECT_SOURCE_DIR}/lpr/*.c"
     "${PROJECT_SOURCE_DIR}/lpr_third_party/FineMapping.cpp"
@@ -46,6 +46,7 @@ target_sources(test_lpr
         )
 
 target_link_libraries(test_lpr
+                      cnn_runtime
                       opencv_core
                       opencv_imgcodecs
                       opencv_imgproc

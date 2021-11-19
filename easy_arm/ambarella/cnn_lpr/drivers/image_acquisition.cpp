@@ -2458,7 +2458,8 @@ int ImageAcquisition::stop()
 	int ret = 0;
 	run_camera = 0;
 	if (pthread_id > 0) {
-		pthread_cond_signal(&image_buffer.notfull);  
+		pthread_cond_signal(&image_buffer.notfull);
+		pthread_cond_signal(&image_buffer.notempty);  
 		pthread_mutex_unlock(&image_buffer.lock);
 		pthread_join(pthread_id, NULL);
 		pthread_id = 0;

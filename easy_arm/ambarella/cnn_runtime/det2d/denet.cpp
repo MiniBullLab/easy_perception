@@ -70,8 +70,8 @@ std::vector<std::vector<float>> DeNet::run(const cv::Mat &srcImage)
     int output_w = nnctrl_ctx.net.net_out.out_desc[0].dim.width;
     int output_p = nnctrl_ctx.net.net_out.out_desc[0].dim.pitch / 4;
 
-    std::cout << "output size: " << "--output_c: " << output_c << "--output_h: " << output_h << "--output_w: " \
-                                  << output_w << "--output_p: " << output_p << "--" << std::endl;
+    // std::cout << "output size: " << "--output_c: " << output_c << "--output_h: " << output_h << "--output_w: " \
+    //                               << output_w << "--output_p: " << output_p << "--" << std::endl;
 
     // std::ofstream ouF;
     // ouF.open("./score.bin", std::ofstream::binary);

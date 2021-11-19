@@ -62,7 +62,7 @@ cv::Size get_input_size(nnctrl_ctx_t *nnctrl_ctx)
     // int channel = nnctrl_ctx->net.net_in.in_desc[0].dim.depth;
     int height = nnctrl_ctx->net.net_in.in_desc[0].dim.height;
     int width = nnctrl_ctx->net.net_in.in_desc[0].dim.width;
-    std::cout << "input --height: " << height << "--width: " << width << std::endl;
+    // std::cout << "input --height: " << height << "--width: " << width << std::endl;
     cv::Size dst_size(width, height);
     return dst_size;
 }
@@ -85,7 +85,7 @@ int get_output_channel(nnctrl_ctx_t *nnctrl_ctx)
 int get_input_pitch(nnctrl_ctx_t *nnctrl_ctx)
 {
     int pitch = nnctrl_ctx->net.net_in.in_desc[0].dim.pitch;
-    std::cout << "input --pitch: " << pitch << "--" << std::endl;
+    // std::cout << "input --pitch: " << pitch << "--" << std::endl;
     return pitch;
 }
 
@@ -93,7 +93,7 @@ int get_output_pitch(nnctrl_ctx_t *nnctrl_ctx)
 {
     int width = nnctrl_ctx->net.net_in.in_desc[0].dim.width;
     int pitch = LAYER_P(width);
-    std::cout << "output --pitch: " << pitch << "--" << std::endl;
+    // std::cout << "output --pitch: " << pitch << "--" << std::endl;
     return pitch;
 }
 

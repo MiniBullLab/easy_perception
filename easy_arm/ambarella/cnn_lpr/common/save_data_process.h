@@ -47,6 +47,8 @@ public:
 
     int init_data();
 
+    int init_save_dir();
+
     int start();
     int stop();
 

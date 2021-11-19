@@ -406,9 +406,8 @@ int SaveDataProcess::init_data()
     return 0;
 }
 
-int SaveDataProcess::start()
+int SaveDataProcess::init_save_dir()
 {
-    int ret = 0;
     struct timeval tv;  
     char time_str[64];
 	std::stringstream save_path;
@@ -437,7 +436,13 @@ int SaveDataProcess::start()
     //     LOG(ERROR) << "mkdir dir fail:" << command;
     //     return -1;
     // }
-#ifndef ONLY_SAVE_DATA
+    return 0;
+}
+
+int SaveDataProcess::start()
+{
+    int ret = 0;
+    ret = init_save_dir();
     image_buffer.readpos = 0;  
     image_buffer.writepos = 0;
 
@@ -452,15 +457,16 @@ int SaveDataProcess::start()
     }
     else
     {
+        LOG(WARNING) << "start image tof pthread:" << image_pthread_id;
         ret = pthread_create(&tof_pthread_id, NULL, save_tof_pthread, NULL);
         if(ret < 0)
         {
             save_run = 0;
             LOG(ERROR) << "save tof pthread fail!";
         }
+        LOG(WARNING) << "start save tof pthread:" << tof_pthread_id;
     }
     LOG(INFO) << "save pthread start success!";
-#endif
 	return ret;
 }
 
@@ -469,7 +475,7 @@ int SaveDataProcess::stop()
     int ret = 0;
 	save_run = 0;
 
-    LOG(WARNING) << "stop save data";
+    // LOG(WARNING) << "stop save data";
 
 	if (image_pthread_id > 0) {
         pthread_cond_signal(&image_buffer.notempty);  

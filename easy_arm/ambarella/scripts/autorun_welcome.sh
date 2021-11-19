@@ -39,7 +39,7 @@ test_mempart -m 4 -s 0x04000000
 
 ntpdate 10.0.0.102 &
 
-sleep 2
+sleep 3
 
 export LD_LIBRARY_PATH=/data:$LD_LIBRARY_PATH
 

@@ -1,6 +1,7 @@
 #include "cnn_runtime/cnn_common/net_process.h"
 
 const static int g_canvas_id = 1;
+static int nnctrl_first_init = 1;
 
 static int init_net_memory(struct net_cfg *cfg, struct net_input_cfg *input_cfg, struct net_output_cfg *ouput_cfg, struct net_mem *mem,
                            uint8_t verbose, uint8_t reuse_mem, uint32_t batch_num, uint8_t cache_en, char *model_file_path){
@@ -70,10 +71,17 @@ int init_net_context(nnctrl_ctx_t *nnctrl_ctx,
 
     DPRINT_NOTICE("%s: %u.%u.%u, mod-time: 0x%x\n",
                     ver.description, ver.major, ver.minor, ver.patch, ver.mod_time);
-    rval = nnctrl_init(cavalry_ctx->fd_cavalry, verbose);
-
-    if (rval < 0) {
-        printf("nnctrl_init failed\n");
+    if(nnctrl_first_init == 1){
+        rval = nnctrl_init(cavalry_ctx->fd_cavalry, verbose);
+        if (rval < 0) {
+            printf("nnctrl_init failed\n");
+        }
+        else{
+            nnctrl_first_init = 0;
+        }
+    }
+    else{
+        printf("nnctrl_init not first\n");
     }
     return rval;
 }

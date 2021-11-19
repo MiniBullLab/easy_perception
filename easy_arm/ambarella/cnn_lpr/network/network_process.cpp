@@ -1,4 +1,4 @@
-#include "net_process.h"
+#include "network_process.h"
 #include "utility/utils.h"
 #include <iostream>
 
@@ -90,7 +90,7 @@ static void * upd_recv_msg(void *arg)
 	return NULL;
 }
 
-NetProcess::NetProcess()
+NetWorkProcess::NetWorkProcess()
 {
 	upd_port = 9999;
 	udp_socket_fd = -1;
@@ -107,7 +107,7 @@ NetProcess::NetProcess()
 	recv_thread_id = 0;
 }
 
-NetProcess::~NetProcess()
+NetWorkProcess::~NetWorkProcess()
 {
 	if(net_run_flag > 0)
 	{
@@ -124,10 +124,10 @@ NetProcess::~NetProcess()
 	pthread_mutex_destroy(&send_mutex);
 	sem_destroy(&sem_put);
 	sem_destroy(&sem_get);
-	LOG(INFO) << "~NetProcess()";
+	LOG(INFO) << "~NetWorkProcess()";
 }
 
-int NetProcess::init_network()
+int NetWorkProcess::init_network()
 {
 	int rval = 0;
 	int on = 1; //开启
@@ -189,7 +189,7 @@ int NetProcess::init_network()
 	return rval;
 }
 
-int NetProcess::start()
+int NetWorkProcess::start()
 {
 	int rval = 0;
 	net_run_flag = 1;
@@ -215,7 +215,7 @@ int NetProcess::start()
 	return rval;
 }
 
-int NetProcess::stop()
+int NetWorkProcess::stop()
 {
 	int ret = 0;
 	net_run_flag = 0;
@@ -236,7 +236,7 @@ int NetProcess::stop()
 	return ret;
 }
 
-int NetProcess::process_recv()
+int NetWorkProcess::process_recv()
 {
 	int result = 0;
 	if(sem_wait(&sem_put) == 0)
@@ -257,7 +257,7 @@ int NetProcess::process_recv()
 	return result;
 }
 
-int NetProcess::send_result(const std::string &lpr_result, const int code)
+int NetWorkProcess::send_result(const std::string &lpr_result, const int code)
 {
 	struct timeval tv;  
     char time_str[64];
@@ -273,7 +273,7 @@ int NetProcess::send_result(const std::string &lpr_result, const int code)
 	return 0;
 }
 
-int NetProcess::send_log_path()
+int NetWorkProcess::send_log_path()
 {
 	std::vector<std::string> log_list;
 	std::string log_dir = "/data/glog_file/";
@@ -291,7 +291,7 @@ int NetProcess::send_log_path()
 	return 0;
 }
 
-int NetProcess::send_save_data()
+int NetWorkProcess::send_save_data()
 {
 	std::vector<std::string> data_list;
 	std::string save_dir = "/data/save_data/";

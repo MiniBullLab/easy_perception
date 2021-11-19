@@ -1,5 +1,5 @@
-#ifndef _NET_PROCESS_H_
-#define _NET_PROCESS_H_
+#ifndef _NETWORK_PROCESS_H_
+#define _NETWORK_PROCESS_H_
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,11 +21,11 @@
 #include <glog/raw_logging.h>
 
 
-class NetProcess
+class NetWorkProcess
 {
 public:
-    NetProcess();
-    ~NetProcess();
+    NetWorkProcess();
+    ~NetWorkProcess();
 
     int init_network();
     int start();
@@ -55,4 +55,4 @@ private:
 	pthread_t recv_thread_id;
 };
 
-#endif // _NET_PROCESS_H_
+#endif // _NETWORK_PROCESS_H_

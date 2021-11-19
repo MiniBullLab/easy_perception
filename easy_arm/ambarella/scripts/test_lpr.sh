@@ -2,7 +2,7 @@
 
 ntpdate 10.0.0.102 &
 
-sleep 3
+sleep 6
 
 export LD_LIBRARY_PATH=/data:$LD_LIBRARY_PATH
 

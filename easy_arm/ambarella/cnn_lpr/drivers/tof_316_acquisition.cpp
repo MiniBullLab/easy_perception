@@ -1354,8 +1354,8 @@ static void *run_tof_pthread(void* data)
 
 		for (int i = 0; i < nImgsize; i++)
 		{
-			tof_buffer.buffer_x[tof_buffer.writepos][i] = Xvalue[i];
-			tof_buffer.buffer_y[tof_buffer.writepos][i] = Yvalue[i];
+			// tof_buffer.buffer_x[tof_buffer.writepos][i] = Xvalue[i];
+			// tof_buffer.buffer_y[tof_buffer.writepos][i] = Yvalue[i];
 			tof_buffer.buffer_z[tof_buffer.writepos][i] = Zvalue[i];
 		}
 		

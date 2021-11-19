@@ -20,8 +20,8 @@
 
 struct TOFBuffer  
 {  	
-    float buffer_x[TOF_BUFFER_SIZE][MAX_POINT_CLOUD];
-	float buffer_y[TOF_BUFFER_SIZE][MAX_POINT_CLOUD];
+    // float buffer_x[TOF_BUFFER_SIZE][MAX_POINT_CLOUD];
+	// float buffer_y[TOF_BUFFER_SIZE][MAX_POINT_CLOUD];
 	float buffer_z[TOF_BUFFER_SIZE][MAX_POINT_CLOUD];
     pthread_mutex_t lock; /* 互斥体lock 用于对缓冲区的互斥操作 */  
     int readpos, writepos; /* 读写指针*/  

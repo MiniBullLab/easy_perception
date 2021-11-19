@@ -20,7 +20,7 @@
 #if defined(ONLY_SAVE_DATA) || defined(ONLY_SEND_DATA)
 #define IMAGE_BUFFER_SIZE (4)
 #else
-#define IMAGE_BUFFER_SIZE (1)
+#define IMAGE_BUFFER_SIZE (2)
 #endif
 #define IMAGE_WIDTH (1920)
 #define IMAGE_HEIGHT (1080)
