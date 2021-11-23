@@ -4,6 +4,8 @@ PROJECT(tests)
 include_directories(${amba_arm_BINARY_DIR})
 include_directories(${amba_arm_SOURCE_DIR})
 
+add_definitions(-D_USE_AMBAR_)
+
 #collect source files
 file(GLOB UTILITY_SRCS
     "${amba_arm_SOURCE_DIR}/utility/*.cpp"
@@ -16,6 +18,7 @@ target_link_libraries(textnet_test
                       opencv_imgcodecs
                       opencv_imgproc
                       opencv_highgui 
+                      tbb
                       jpeg
                       png
                       z
@@ -30,6 +33,7 @@ target_link_libraries(classnet_test
                       opencv_imgcodecs
                       opencv_imgproc
                       opencv_highgui 
+                      tbb
                       jpeg
                       png
                       z
@@ -44,6 +48,7 @@ target_link_libraries(denet_test
                       opencv_imgcodecs
                       opencv_imgproc
                       opencv_highgui
+                      tbb
                       jpeg
                       png
                       z
@@ -58,6 +63,7 @@ target_link_libraries(segnet_test
                       opencv_imgcodecs
                       opencv_imgproc
                       opencv_highgui 
+                      tbb
                       jpeg
                       png
                       z
@@ -65,26 +71,26 @@ target_link_libraries(segnet_test
                       vproc
                       cavalry_mem)
 
-add_executable(posenet_test posenet_test.cpp ${UTILITY_SRCS})
-target_link_libraries(posenet_test
-                      cnn_runtime 
-                      opencv_core
-                      opencv_imgcodecs
-                      opencv_imgproc
-                      opencv_highgui
-                      opencv_flann
-                      opencv_features2d
-                      opencv_videoio
-                      jpeg
-                      png
-                      z
-                      nnctrl
-                      vproc
-                      cavalry_mem
-                      utils
-                      cvlib
-                      PhaseData_20190919_v1.4f
-                      IOdevice)
+# add_executable(posenet_test posenet_test.cpp ${UTILITY_SRCS})
+# target_link_libraries(posenet_test
+#                       cnn_runtime 
+#                       opencv_core
+#                       opencv_imgcodecs
+#                       opencv_imgproc
+#                       opencv_highgui
+#                       opencv_flann
+#                       opencv_features2d
+#                       opencv_videoio
+#                       jpeg
+#                       png
+#                       z
+#                       nnctrl
+#                       vproc
+#                       cavalry_mem
+#                       utils
+#                       cvlib
+#                       PhaseData_20190919_v1.4f
+#                       IOdevice)
 
 add_executable(one_class_test one_class_test.cpp ${UTILITY_SRCS})
 target_link_libraries(one_class_test
@@ -94,6 +100,7 @@ target_link_libraries(one_class_test
                       opencv_imgproc
                       opencv_highgui 
                       opencv_ml
+                      tbb
                       jpeg
                       png
                       z

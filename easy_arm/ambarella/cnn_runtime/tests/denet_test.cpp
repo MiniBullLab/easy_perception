@@ -8,12 +8,12 @@
 #include "utility/utils.h"
 #include "cnn_runtime/det2d/denet.h"
 
-#define CLASS_NUMBER (2)
+#define CLASS_NUMBER (1)
 
 const static std::string model_path = "./denet.bin";
 const static std::vector<std::string> input_name = {"data"};
 const static std::vector<std::string> output_name = {"det_output0", "det_output1", "det_output2"};
-const char* class_name[CLASS_NUMBER] = {"green_strawberry", "strawberry"};
+const char* class_name[CLASS_NUMBER] = {"car"};
 
 static bool is_file_exists(const std::string& name) {
     std::ifstream f(name.c_str());
@@ -116,10 +116,10 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
             float confidence = boxes[i][5];
             save_result << class_name[type] << " " << confidence << " " << xmin 
                                 << " " << ymin << " " << xmax << " " << ymax << "|";
-            // cv::rectangle(src_image, cv::Point(xmin, ymin), cv::Point(xmax, ymax), cv::Scalar(0, 255, 255), 2, 4);
+            cv::rectangle(src_image, cv::Point(xmin, ymin), cv::Point(xmax, ymax), cv::Scalar(0, 255, 255), 2, 4);
 	    }
         save_result << "\n";
-        // cv::imwrite(image_name, src_image);
+        cv::imwrite(image_name, src_image);
     }
     read_txt.close();
     save_result.close();
@@ -145,6 +145,7 @@ int main(int argc, char **argv)
     // }
     const std::string image_dir = "./images/";
     const std::string image_txt_path = "./val.txt";
+    // image_dir_infer("/data/offline_data/48/image/");
     image_txt_infer(image_dir, image_txt_path);
     std::cout << "End of game!!!" << std::endl;
     return 0;

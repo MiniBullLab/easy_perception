@@ -27,7 +27,7 @@ message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
 add_subdirectory(cnn_runtime)
 
 #build test cnn
-#add_subdirectory(cnn_runtime/tests)
+add_subdirectory(cnn_runtime/tests)
 
 #build cnn_lpr
 add_subdirectory(cnn_lpr)

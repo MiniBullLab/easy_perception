@@ -11,7 +11,7 @@
 //opencv
 #include <opencv2/core.hpp>
 
-#define TOF_BUFFER_SIZE (3)
+#define TOF_BUFFER_SIZE (4)
 #define MAX_POINT_CLOUD (240*180)
 
 #define DEPTH_WIDTH (240)

@@ -32,16 +32,16 @@
 
 #define TIME_MEASURE_LOOPS			(100)
 
-#define IS_SHOW 
+#define IS_SHOW
 
 const static std::string model_path = "./denet.bin";
 const static std::vector<std::string> input_name = {"data"};
 const static std::vector<std::string> output_name = {"det_output0", "det_output1", "det_output2"};
 const char* class_name[CLASS_NUMBER] = {"car"};
 
-static float lpr_confidence = 0;
 static bbox_param_t lpr_bbox;
 static int width_diff = 0;
+static float lpr_confidence = 0;
 static std::string lpr_result = "";
 
 volatile int has_lpr = 0;
@@ -320,10 +320,12 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 
 				start_time = gettimeus();
 
-				// TIME_MEASURE_START(1);
-				// RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
-				// save_process.put_image_data(bgr);
-				// TIME_MEASURE_END("[SSD] yuv to bgr time", 1);
+#ifdef IS_SAVE
+				TIME_MEASURE_START(1);
+				RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
+				save_process.put_image_data(bgr);
+				TIME_MEASURE_END("[SSD] yuv to bgr time", 1);
+#endif
 
 				TIME_MEASURE_START(debug_en);
 				RVAL_OK(ea_cvt_color_resize(img_tensor, SSD_ctx.net_input.tensor,
@@ -424,12 +426,21 @@ static void *run_denet_pthread(void *thread_params)
 	{
 		cv::Mat src_image;
 		TIME_MEASURE_START(1);
+#if defined(OFFLINE_DATA)
+		save_process.get_image(src_image);
+		if(src_image.empty())
+		{
+			LOG(ERROR) << "DeNet get image fail!";
+			break;
+		}
+#else
 		image_geter.get_image(src_image);
 		if(src_image.empty())
 		{
 			LOG(ERROR) << "DeNet get image fail!";
 			continue;
 		}
+#endif
 		boxes = denet_process.run(src_image);
 		TIME_MEASURE_END("[run_denet_pthread] cost time", 1);
 		bbox_list.bbox_num = min(boxes.size(), MAX_OVERLAY_PLATE_NUM);
@@ -448,9 +459,12 @@ static void *run_denet_pthread(void *thread_params)
             std::cout << class_name[type] << " " << confidence << " " << xmin 
                                 << " " << ymin << " " << xmax << " " << ymax << "|";
 	    }
+#ifdef IS_SHOW
 		RVAL_OK(set_overlay_bbox(&bbox_list));
 		RVAL_OK(show_overlay(dsp_pts));
+#endif
 	}
+	run_denet = 0;
 	LOG(WARNING) << "run_denet_pthread quit！";
 	return NULL;
 }
@@ -494,10 +508,17 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 	cv::Mat img_output;
 	IBGS *bgs = new ViBeBGS();
 
+	lpr_confidence = 1;
+	lpr_result = "12345678";
+
 	result_list.clear();
 	point_cout_list.clear();
 
+#if defined(OFFLINE_DATA)
+	save_process.get_tof_depth_map(depth_map);
+#else
 	tof_geter.get_tof_depth_map(depth_map);
+#endif
 	// cv::medianBlur(depth_map, bg_map, 3);
 	cv::GaussianBlur(depth_map, bg_map, cv::Size(9, 9), 3.5, 3.5);
 	cv::imwrite("./bg.png", bg_map);
@@ -505,7 +526,11 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 	while(run_flag > 0)
 	{
 		TIME_MEASURE_START(debug_en);
+#if defined(OFFLINE_DATA)
+		save_process.get_tof_depth_map(depth_map);
+#else
 		tof_geter.get_tof_depth_map(depth_map);
+#endif
 		TIME_MEASURE_END("[point_cloud] get TOF cost time", debug_en);
 
 		TIME_MEASURE_START(debug_en);
@@ -529,6 +554,9 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 
 		if(bg_point_count > 50)
 		{
+			run_lpr = 1;
+			tof_geter.set_up();
+#ifdef IS_SAVE
 			if(first_save)
 			{
 				if(save_process.start() >= 0)
@@ -537,10 +565,9 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 					save_process.put_tof_data(pre_map);
 				}	
 			}
-			tof_geter.set_up();
-			// run_lpr = 1;
 			if(!first_save)
 				save_process.put_tof_data(depth_map);
+#endif
 			if(has_lpr == 1)
 			{
 				point_cout_list.push_back(bg_point_count);
@@ -574,7 +601,7 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 				{
 					final_result = 0;
 				}
-				LOG(INFO) << "final_result:" << final_result;
+				LOG(WARNING) << "final_result:" << final_result;
 				pthread_mutex_lock(&result_mutex);
 				LOG(INFO) << "width_diff:" << width_diff;
 				if(send_count == 1 && final_result == 0 && width_diff < 10)
@@ -606,13 +633,17 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 				process_number = 0;
 				no_process_number = 0;
 				has_lpr = 0;
-				// run_lpr = 0;
+				run_lpr = 0;
+				tof_geter.set_sleep();
+				lpr_confidence = 1;
+	            lpr_result = "12345678";
+#ifdef IS_SAVE
 				if(!first_save)
 				{
 					save_process.stop();
 					first_save = true;
 				}
-				tof_geter.set_sleep();
+#endif
 				LOG(WARNING) << "no process";
 			}
 		}
@@ -629,6 +660,9 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 		process_number++;
 		usleep(20000);
 	}
+	run_denet = 0;
+	run_lpr = 0;
+	run_flag = 0;
 	delete bgs;
     bgs = NULL;
 	LOG(WARNING) << "stop point cloud process";
@@ -659,17 +693,20 @@ static int start_all(global_control_param_t *G_param)
 		LOG(INFO) << "start image success";
 	}
 
-	// if(tof_geter.start() < 0)
-	// {
-	// 	rval = -1;
-	// 	run_flag = 0;
-	// 	LOG(ERROR) << "start tof fail!";
-	// 	return rval;
-	// }
-	// else
-	// {
-	// 	LOG(INFO) << "start tof success";
-	// }
+#if defined(OFFLINE_DATA)
+	save_process.offline_start();
+#else
+	if(tof_geter.start() < 0)
+	{
+		rval = -1;
+		run_flag = 0;
+		LOG(ERROR) << "start tof fail!";
+		return rval;
+	}
+	else
+	{
+		LOG(INFO) << "start tof success";
+	}
 
 	if(image_geter.start() < 0)
 	{
@@ -682,6 +719,7 @@ static int start_all(global_control_param_t *G_param)
 	{
 		LOG(INFO) << "start image success";
 	}
+#endif
 
 	do {
 		pthread_mutex_init(&result_mutex, NULL);
@@ -731,9 +769,13 @@ static int start_all(global_control_param_t *G_param)
 		denet_pthread_id = 0;
 	}
 	LOG(WARNING) << "denet pthread release";
+#if defined(OFFLINE_DATA)
+	save_process.offline_stop();
+#else
 	tof_geter.stop();
 	image_geter.stop();
 	save_process.stop();
+#endif
 	network_process.stop();
 	if (process_recv_pthread_id > 0) {
 		pthread_join(process_recv_pthread_id, NULL);
@@ -750,14 +792,17 @@ static int start_all(global_control_param_t *G_param)
 static void *run_tof_pthread(void *thread_params)
 {
 	uint64_t debug_time = 0;
+	//unsigned char tof_data[TOF_SIZE];
 	cv::Mat depth_map = cv::Mat::zeros(cv::Size(DEPTH_WIDTH, DEPTH_HEIGTH),CV_8UC1);
 	prctl(PR_SET_NAME, "run_tof_pthread");
 	tof_geter.set_up();
 	while(run_flag)
 	{
 		TIME_MEASURE_START(1);
+		// tof_geter.get_tof_Z(tof_data);
+		// save_process.save_tof_z(depth_map);
 		tof_geter.get_tof_depth_map(depth_map);
-		save_process.save_tof(depth_map);
+		save_process.save_depth_map(depth_map);
 		TIME_MEASURE_END("[run_tof_pthread] cost time", 1);
 	}
 	// pthread_detach(pthread_self());
@@ -810,6 +855,9 @@ static void sigstop(int signal_number)
 	run_denet = 0;
 	run_lpr = 0;
 	run_flag = 0;
+#if defined(OFFLINE_DATA)
+	save_process.offline_stop();
+#endif
 	LOG(WARNING) << "sigstop msg, exit";
 }
 
@@ -818,6 +866,9 @@ static void SignalHandle(const char* data, int size) {
 	run_denet = 0;
 	run_lpr = 0;
 	run_flag = 0;
+#if defined(OFFLINE_DATA)
+	save_process.offline_stop();
+#endif
     LOG(FATAL) << str;
 }
 
@@ -926,6 +977,21 @@ int main(int argc, char **argv)
 			LOG(ERROR) << "start_all fail!";
 		}
 	}
+#elif defined(OFFLINE_DATA)
+	if(network_process.init_network() < 0)
+	{
+		rval = -1;
+		run_flag = 0;
+		return -1;
+	}
+	LOG(INFO) << "net init success";
+	save_process.set_save_dir("/data/offline_data/1/image/", "/data/offline_data/1/tof/");
+	do {
+		RVAL_OK(init_param(&G_param));
+		RVAL_OK(env_init(&G_param));
+		RVAL_OK(start_all(&G_param));
+	}while(0);
+	env_deinit(&G_param);
 #else
 	if(tof_geter.open_tof() == 0 && image_geter.open_camera() == 0)
 	{
@@ -933,6 +999,7 @@ int main(int argc, char **argv)
 		{
 			rval = -1;
 			run_flag = 0;
+			return -1;
 		}
 		LOG(INFO) << "net init success";
 		save_process.init_data();

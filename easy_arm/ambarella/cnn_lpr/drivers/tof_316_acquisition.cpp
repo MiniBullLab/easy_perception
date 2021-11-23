@@ -1384,6 +1384,7 @@ TOF316Acquisition::TOF316Acquisition()
 {
     run_tof = 0;
 	pthread_id = 0;
+	LOG(WARNING) << TOF_BUFFER_SIZE;
 }
 
 TOF316Acquisition::~TOF316Acquisition()
@@ -1492,7 +1493,7 @@ void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map)
 		for(int i = 0; i < MAX_POINT_CLOUD && run_tof > 0; i++)
 		{
 			if (tof_buffer.buffer_z[tof_buffer.readpos][i] > max_dst || \
-					tof_buffer.buffer_z[tof_buffer.readpos][i] < 0.8f || \
+					tof_buffer.buffer_z[tof_buffer.readpos][i] < 0.5f || \
 					(tof_buffer.buffer_z[tof_buffer.readpos][i] == 0))
 					{
 						*depth_ptr = 0;

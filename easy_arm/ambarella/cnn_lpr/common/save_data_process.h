@@ -10,15 +10,23 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/videoio.hpp>
 
-#include "cnn_lpr/drivers/tof_316_acquisition.h"
 #include "cnn_lpr/drivers/image_acquisition.h"
+#include "cnn_lpr/drivers/tof_316_acquisition.h"
+
+//#define IS_SAVE
 
 #if defined(ONLY_SAVE_DATA) || defined(ONLY_SEND_DATA)
 #define SAVE_TOF_BUFFER_SIZE (1)
 #define SAVE_IMAGE_BUFFER_SIZE (1)
-#else
+#elif defined(OFFLINE_DATA)
+#define SAVE_TOF_BUFFER_SIZE (4)
+#define SAVE_IMAGE_BUFFER_SIZE (4)
+#elif defined(IS_SAVE)
 #define SAVE_TOF_BUFFER_SIZE (2)
 #define SAVE_IMAGE_BUFFER_SIZE (3)
+#else
+#define SAVE_TOF_BUFFER_SIZE (1)
+#define SAVE_IMAGE_BUFFER_SIZE (1)
 #endif
 
 struct SaveTofBuffer  
@@ -49,22 +57,34 @@ public:
 
     int init_save_dir();
 
+    int set_save_dir(const std::string &image_path, const std::string &tof_path);
+
     int start();
     int stop();
 
     int video_start();
     int video_stop();
 
+    int offline_start();
+    int offline_stop();
+
     void put_image_data(cv::Mat &src_image);
     void put_tof_data(cv::Mat &depth_map);
 
+    void get_image(cv::Mat &src_image);
+
+    void get_tof_depth_map(cv::Mat &depth_map);
+
     void save_image(cv::Mat &src_image);
-    void save_tof(cv::Mat &depth_map);
+    void save_depth_map(cv::Mat &depth_map);
+    void save_tof_z(const unsigned char* tof_data);
 
 private:
     pthread_t image_pthread_id;
     pthread_t tof_pthread_id;
     pthread_t video_pthread_id;
+    pthread_t offline_image_pthread_id;
+    pthread_t offline_tof_pthread_id;
     std::string save_dir;
     unsigned long long int save_index;
     unsigned long long int tof_frame_number;
