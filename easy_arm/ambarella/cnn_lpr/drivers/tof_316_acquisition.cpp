@@ -53,6 +53,7 @@
 #define MAX_BUFFER_NUM		(10)
 #define SHUTTER_1BY100000	(5120)		/* (512000000 / 100000) */
 #define SHUTTER_1BY1000		(512000)	/* (1000us for experiments) */
+#define SHUTTER_1BY2000		(1.5 * 512000)	/* (1500us for experiments) */
 #define IMX316_INT_A		(0x2110)	/* integration_time A [31:0] */
 #define IMX316_INT_B		(0x2114)	/* integration_time B [31:0] */
 #define WARP_FIX16_BIN			"/usr/local/bin/warp_cavalry_2_2_in240x180_fx16.bin"
@@ -221,9 +222,9 @@ static tof_ae_config_t tof_ae_cfg;
 static int do_acceleration = 0;
 static int single_mode = 0;
 static int phase_number = SINGLE_PHASE_NUM;
-static int thConfidence = 1; 
+static int thConfidence = 0; 
 static int auto_exposure_flag = 0;
-static int init_exposure_time = SHUTTER_1BY1000;
+static int init_exposure_time = SHUTTER_1BY2000;
 static int trigger_flag = 1;
 
 #define SPI_COMMAND_LENGTH 	(4)
@@ -1474,7 +1475,7 @@ void TOF316Acquisition::set_sleep()
 void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map)
 {
 	int i, j, index;
-	float inv_dst = 0;
+	float dst = 0;
 	float max_dst = 0;
 	uchar* depth_ptr = depth_map.ptr<uchar>(0);
 	if (sensor_type == SENSOR_IMX316) {
@@ -1482,7 +1483,7 @@ void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map)
 	} else {
 		max_dst = MAX_DIST_456;
 	}
-	max_dst = 3.0f;
+	max_dst = 3.5f;
 	if(pthread_id > 0) 
 	{
 		pthread_mutex_lock(&tof_buffer.lock);  
@@ -1493,15 +1494,15 @@ void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map)
 		for(int i = 0; i < MAX_POINT_CLOUD && run_tof > 0; i++)
 		{
 			if (tof_buffer.buffer_z[tof_buffer.readpos][i] > max_dst || \
-					tof_buffer.buffer_z[tof_buffer.readpos][i] < 0.5f || \
+					tof_buffer.buffer_z[tof_buffer.readpos][i] < 0.3f || \
 					(tof_buffer.buffer_z[tof_buffer.readpos][i] == 0))
 					{
 						*depth_ptr = 0;
 					} 
 					else 
 					{
-						inv_dst = max_dst - tof_buffer.buffer_z[tof_buffer.readpos][i];
-						*depth_ptr = static_cast<uchar>(inv_dst * 255 / max_dst);
+						dst = tof_buffer.buffer_z[tof_buffer.readpos][i];
+						*depth_ptr = static_cast<uchar>(dst * 255 / max_dst);
 					}
 			depth_ptr++;
 		} 

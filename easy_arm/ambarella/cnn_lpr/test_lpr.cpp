@@ -182,7 +182,7 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
 
 		while (run_flag) {
-			while(run_lpr > 1)
+			while(run_lpr > 0)
 			{
 				RVAL_OK(lpr_critical_resource(&license_num, bbox_param,
 				ssd_mid_buf, G_param));
@@ -301,7 +301,7 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
 
 		while (run_flag) {
-			while(run_lpr > 1){
+			while(run_lpr > 0){
 				RVAL_OK(ea_img_resource_hold_data(G_param->img_resource, &data));
 				RVAL_ASSERT(data.tensor_group != NULL);
 				RVAL_ASSERT(data.tensor_num >= 1);
@@ -487,12 +487,42 @@ static void *process_recv_pthread(void *thread_params)
 	return NULL;
 }
 
+static int send_count = 0;
+
+static void merge_all_result(const int in_out_result)
+{
+	int final_result = in_out_result;
+	LOG(INFO) << "width_diff:" << width_diff;
+	if(send_count == 1 && final_result == 0 && width_diff < 10)
+	{
+		final_result = -1;
+	}
+	if(final_result >= 0)
+	{
+		if(lpr_result != "" && lpr_confidence > 0)
+		{
+			network_process.send_result(lpr_result, final_result);
+			send_count = 1;
+			lpr_confidence = 0;
+		}
+		else if(final_result == 1 && lpr_result != "")
+		{
+			network_process.send_result(lpr_result, final_result);
+			lpr_result = "";
+			lpr_confidence = 0;
+		}
+		if(final_result == 1)
+		{
+			send_count = 0;
+		}
+	}
+}
+
 static void process_pc_pthread(const global_control_param_t *G_param)
 {
 	uint64_t debug_time = 0;
 	uint32_t debug_en = G_param->debug_en;
 	bool first_save = true;
-	int send_count = 0;
 	int bg_point_count = 0;
 	// int is_in = -1;
 	unsigned long long int process_number = 0;
@@ -508,8 +538,11 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 	cv::Mat img_output;
 	IBGS *bgs = new ViBeBGS();
 
+#if defined(OFFLINE_DATA)
 	lpr_confidence = 1;
 	lpr_result = "12345678";
+	has_lpr = 1;
+#endif
 
 	result_list.clear();
 	point_cout_list.clear();
@@ -571,62 +604,32 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 			if(has_lpr == 1)
 			{
 				point_cout_list.push_back(bg_point_count);
-				// process_number++;
-				// if(process_number % 10 == 0)
-				// {
-				// 	is_in = vote_in_out(point_cout_list);
-				// 	result_list.push_back(is_in);
-				// 	point_cout_list.clear();
-				// }
 			}
 		}
+		// std::cout << "has_lpr:" << has_lpr << std::endl;
 		if(bg_point_count <= 50 || has_lpr == 0)
 		{
 			no_process_number++;
 			if(no_process_number % 10 == 0)
 			{
-				int final_result = vote_in_out(point_cout_list);
-				//int final_result = get_in_out(result_list);
+				int in_out_result = vote_in_out(point_cout_list);
 				int point_count = compute_depth_map(bg_map, filter_map);
-				LOG(WARNING) << "final point_count:" << point_count << " " << final_result;
-				if(final_result == 0 && point_count >= 500)
+				LOG(WARNING) << "final point_count:" << point_count << " " << in_out_result;
+				if(in_out_result == 0 && point_count >= 500)
 				{
-					final_result = 0;
+					in_out_result = 0;
 				}
-				else if(final_result == 0 && point_count < 100)
+				else if(in_out_result == 0 && point_count < 100)
 				{
-					final_result = 1;
+					in_out_result = 1;
 				}
-				else if(final_result == 1 && point_count >= 500)
+				else if(in_out_result == 1 && point_count >= 500)
 				{
-					final_result = 0;
+					in_out_result = 0;
 				}
-				LOG(WARNING) << "final_result:" << final_result;
+				LOG(WARNING) << "in_out_result:" << in_out_result;
 				pthread_mutex_lock(&result_mutex);
-				LOG(INFO) << "width_diff:" << width_diff;
-				if(send_count == 1 && final_result == 0 && width_diff < 10)
-				{
-					final_result = -1;
-				}
-				if(final_result >= 0)
-				{
-					if(lpr_result != "" && lpr_confidence > 0)
-					{
-						network_process.send_result(lpr_result, final_result);
-						send_count = 1;
-						lpr_confidence = 0;
-					}
-					else if(final_result == 1 && lpr_result != "")
-					{
-						network_process.send_result(lpr_result, final_result);
-						lpr_result = "";
-						lpr_confidence = 0;
-					}
-					if(final_result == 1)
-					{
-						send_count = 0;
-					}
-				}
+				merge_all_result(in_out_result);
 				pthread_mutex_unlock(&result_mutex);
 				point_cout_list.clear();
 				result_list.clear();
@@ -635,8 +638,11 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 				has_lpr = 0;
 				run_lpr = 0;
 				tof_geter.set_sleep();
+#if defined(OFFLINE_DATA)
 				lpr_confidence = 1;
 	            lpr_result = "12345678";
+				has_lpr = 1;
+#endif
 #ifdef IS_SAVE
 				if(!first_save)
 				{
@@ -685,12 +691,12 @@ static int start_all(global_control_param_t *G_param)
 	{
 		rval = -1;
 		run_flag = 0;
-		LOG(ERROR) << "start image fail!";
+		LOG(ERROR) << "start network fail!";
 		return rval;
 	}
 	else
 	{
-		LOG(INFO) << "start image success";
+		LOG(INFO) << "start network success";
 	}
 
 #if defined(OFFLINE_DATA)
@@ -724,7 +730,6 @@ static int start_all(global_control_param_t *G_param)
 	do {
 		pthread_mutex_init(&result_mutex, NULL);
 		pthread_mutex_init(&ssd_mutex, NULL);
-
 		memset(&lpr_thread_params, 0 , sizeof(lpr_thread_params));
 		memset(&data, 0, sizeof(data));
 		RVAL_OK(ea_img_resource_hold_data(G_param->img_resource, &data));
@@ -741,10 +746,12 @@ static int start_all(global_control_param_t *G_param)
 		ssd_thread_params.pitch = ea_tensor_pitch(img_tensor);
 		ssd_thread_params.G_param = G_param;
 		RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, &data));
+#if !defined(OFFLINE_DATA)
 		rval = pthread_create(&ssd_pthread_id, NULL, run_ssd_pthread, (void*)&ssd_thread_params);
 		RVAL_ASSERT(rval == 0);
 		rval = pthread_create(&lpr_pthread_id, NULL, run_lpr_pthread, (void*)&lpr_thread_params);
 		RVAL_ASSERT(rval == 0);
+#endif
 		rval = pthread_create(&denet_pthread_id, NULL, run_denet_pthread, NULL);
 		RVAL_ASSERT(rval == 0);
 		rval = pthread_create(&process_recv_pthread_id, NULL, process_recv_pthread, NULL);

@@ -382,7 +382,7 @@ static void *offline_tof_pthread(void* save_data)
     std::vector<std::string> data_list;
     unsigned long long int frame_number = 0;
     ListImages(save_tof_dir, data_list);
-    int tof_count = data_list.size();
+    int tof_count = data_list.size() / 2 + 1;
     if(tof_count == 0)
     {
         LOG(ERROR) << "offline tof data not exist:" << save_tof_dir;
@@ -409,9 +409,9 @@ static void *offline_tof_pthread(void* save_data)
         //        in_file.read(reinterpret_cast<char*>(&pData[i]), sizeof(uchar));
 		//    }
            in_file.read(reinterpret_cast<char*>(mat.data), CV_ELEM_SIZE(CV_8UC1) * DEPTH_HEIGTH * DEPTH_WIDTH);
-           std::stringstream filename_tof;
-           filename_tof << "/data/save_data/" << "tof_" << index << ".jpg";
-           cv::imwrite(filename_tof.str(), mat);
+        //    std::stringstream filename_tof;
+        //    filename_tof << "/data/save_data/" << "tof_" << index << ".jpg";
+        //    cv::imwrite(filename_tof.str(), mat);
            tof_buffer.buffer[tof_buffer.writepos] = mat;
            tof_buffer.writepos++;
         }

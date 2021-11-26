@@ -15,8 +15,8 @@
 #include "utility/utils.h"
 
 //#define ONLY_SAVE_DATA
-#define ONLY_SEND_DATA
-//#define OFFLINE_DATA
+//#define ONLY_SEND_DATA
+#define OFFLINE_DATA
 
 #if defined(ONLY_SAVE_DATA)
 #define IMAGE_BUFFER_SIZE (5)
