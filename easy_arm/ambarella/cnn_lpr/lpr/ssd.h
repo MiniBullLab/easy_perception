@@ -66,6 +66,7 @@ typedef struct ssd_net_params_s {
 	uint32_t background_label_id;
 	uint32_t class_num;
 	uint32_t unnormalized;
+	int abort_if_preempted;
 
 	uint32_t debug_en : 1;
 	uint32_t nnctrl_print_time : 1;

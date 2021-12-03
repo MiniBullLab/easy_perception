@@ -5,6 +5,7 @@
 #include "cnn_lpr/lpr/lpr.hpp"
 #include "cnn_lpr/lpr/det_process.h"
 
+#define DEFAULT_LPR_CONF_THRES		(0.9f)
 #define CHINESE_LICENSE_STR_LEN		(9)
 #define DRAW_LICNESE_UPSCALE_H		(1.0f)
 #define DRAW_LICNESE_UPSCALE_W		(0.2f)

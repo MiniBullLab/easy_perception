@@ -70,7 +70,7 @@ typedef struct bbox_list_s {
 } bbox_list_t;
 
 typedef struct license_plate_s {
-	char text[STRING_SIZE];
+	char text[STRING_SIZE + 1];
 	float conf;
 	uint32_t reserve;
 	bbox_param_t bbox;
@@ -83,6 +83,7 @@ typedef struct draw_plate_list_s {
 	uint32_t license_num;
 } draw_plate_list_t;
 
+int set_car_bbox(bbox_list_t *bbox_list);
 int set_overlay_bbox(bbox_list_t *bbox_list);
 int set_overlay_image(ea_tensor_t *complete_img, draw_plate_list_t* draw_plate_list);
 int show_overlay(uint32_t dsp_pts);

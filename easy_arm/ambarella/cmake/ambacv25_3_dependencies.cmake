@@ -1,7 +1,7 @@
 include_directories(${amba_arm_BINARY_DIR})
 include_directories(${amba_arm_SOURCE_DIR})
 
-SET(AMBARELLA_DIR /home/lpj/Downloads/cv2x_linux_sdk_3.0/ambarella)
+SET(AMBARELLA_DIR /home/lpj/Downloads/cv2x_linux_sdk_3.0.6/ambarella)
 
 #fakeroot
 link_directories(${AMBARELLA_DIR}/out/cv25m_pinenut/fakeroot/usr/lib)

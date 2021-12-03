@@ -2,7 +2,7 @@
 export PATH="$PATH:/bin:/sbin"
 
 init.sh --yuv480p
-modprobe imx316_mipi bus_id=0x2 vinc_id=0x1
+modprobe imx316_mipi bus_id=0x2 vinc_id=0x1 trigger_mode=1
 modprobe imx327_mipi bus_id=0 vinc_id=0
 test_tuning -a &
 

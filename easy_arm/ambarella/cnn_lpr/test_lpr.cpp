@@ -21,6 +21,9 @@
 
 #include "cnn_runtime/det2d/denet.h"
 
+#define DEFAULT_SSD_LAYER_ID		(0)
+#define DEFAULT_LPR_LAYER_ID		(0)
+
 #define CLASS_NUMBER (1)
 
 #define FRAME_HEADER1	(0x55)
@@ -32,7 +35,11 @@
 
 #define TIME_MEASURE_LOOPS			(100)
 
-#define IS_SHOW
+#define IS_LPR_RUN
+//#define IS_DENET_RUN
+// #define IS_PC_RUN
+
+//#define IS_SHOW
 
 const static std::string model_path = "./denet.bin";
 const static std::vector<std::string> input_name = {"data"};
@@ -182,23 +189,41 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
 
 		while (run_flag) {
+#if !defined(IS_LPR_RUN)
 			while(run_lpr > 0)
+#endif
 			{
-				RVAL_OK(lpr_critical_resource(&license_num, bbox_param,
-				ssd_mid_buf, G_param));
+				RVAL_OK(lpr_critical_resource(&license_num, bbox_param, ssd_mid_buf, G_param));
 				start_time = gettimeus();
 				data = (ea_img_resource_data_t *)ssd_mid_buf->img_resource_addr;
 				if (license_num == 0) {
 					RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
 					continue;
 				}
-				img_tensor = data->tensor_group[G_param->lpr_pyd_idx];
-				RVAL_OK(LPR_run(&LPR_ctx, img_tensor, license_num,
-					(void*)bbox_param, &license_result));
+				img_tensor = data->tensor_group[DEFAULT_LPR_LAYER_ID];
+				if (G_param->abort_if_preempted) {
+					pthread_mutex_lock(&G_param->vp_access_lock);
+				}
+				RVAL_OK(LPR_run_vp_preprocess(&LPR_ctx, img_tensor, license_num, (void*)bbox_param));
+				if (G_param->abort_if_preempted) {
+					pthread_mutex_unlock(&G_param->vp_access_lock); // unlock to let SSD run during LPR ARM time
+				}
+
+				RVAL_OK(LPR_run_arm_preprocess(&LPR_ctx, license_num));
+				if (G_param->abort_if_preempted) {
+					pthread_mutex_lock(&G_param->vp_access_lock);
+				}
+				RVAL_OK(LPR_run_vp_recognition(&LPR_ctx, license_num, &license_result));
 #ifdef IS_SHOW
-				draw_overlay_preprocess(&draw_plate_list, &license_result,
-					bbox_param, G_param);
+				draw_overlay_preprocess(&draw_plate_list, &license_result, bbox_param, G_param);
+				TIME_MEASURE_START(debug_en);
+				RVAL_OK(set_overlay_image(img_tensor, &draw_plate_list));
+				TIME_MEASURE_END("[LPR] LPR draw overlay time", debug_en);
 #endif
+				if (G_param->abort_if_preempted) {
+					pthread_mutex_unlock(&G_param->vp_access_lock);
+				}
+
 				if(license_result.license_num > 0)
 				{
 					pthread_mutex_lock(&result_mutex);
@@ -211,7 +236,7 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 					lpr_bbox.norm_max_y = bbox_param[0].norm_max_y;
 					pre_lpr_bbox = bbox_param[0];
 					LOG(INFO) << "LPR:"  << license_result.license_info[0].text << " " << license_result.license_info[0].conf;
-					if (license_result.license_info[0].conf > G_param->recg_threshold && \
+					if (license_result.license_info[0].conf > DEFAULT_LPR_CONF_THRES && \
 						strlen(license_result.license_info[0].text) == CHINESE_LICENSE_STR_LEN && \
 						license_result.license_info[0].conf > lpr_confidence)
 						{
@@ -221,9 +246,7 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 						}
 					pthread_mutex_unlock(&result_mutex);
 				}
-				TIME_MEASURE_START(debug_en);
-				RVAL_OK(set_overlay_image(img_tensor, &draw_plate_list));
-				TIME_MEASURE_END("[LPR] LPR draw overlay time", debug_en);
+				
 				RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
 				sum_time += (gettimeus() - start_time);
 				++loop_count;
@@ -236,10 +259,6 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 					sum_time = 0;
 					loop_count = 1;
 					average_license_num = license_num;
-				}
-				if (debug_en == DEBUG_LEVEL) {
-					run_flag = 0;
-					LOG(INFO) << "In debug mode, stop after one loop!";
 				}
 			}
 			usleep(20000);
@@ -255,6 +274,13 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 	return NULL;
 }
 
+static void wait_vp_available(pthread_mutex_t *vp_access_lock)
+{
+	pthread_mutex_lock(vp_access_lock);
+	pthread_mutex_unlock(vp_access_lock);
+
+	return;
+}
 
 static void *run_ssd_pthread(void *ssd_thread_params)
 {
@@ -275,7 +301,6 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 	// image related
 	ea_tensor_t *img_tensor = NULL;
 	ea_img_resource_data_t data;
-	uint32_t dsp_pts = 0;
 
 	// Time measurement
 	uint64_t start_time = 0;
@@ -284,7 +309,16 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 	uint32_t loop_count = 1;
 	uint32_t debug_en = G_param->debug_en;
 
+    uint32_t dsp_pts = 0;
+
+	std::string save_image_dir = "./";
+
+	size_t img_shape[4] = {1, 1, ssd_param->height * 3 / 2, ssd_param->width};
+	img_tensor = ea_tensor_new(EA_U8, img_shape, ssd_param->pitch);
+	// void *yuv_data = ea_tensor_data_for_read(dst, EA_CPU);
     cv::Mat bgr(ssd_param->height * 2 / 3, ssd_param->width, CV_8UC3);
+
+
 	prctl(PR_SET_NAME, "ssd_pthread");
 
 	do {
@@ -294,6 +328,7 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 		memset(&scaled_license_plate, 0, sizeof(scaled_license_plate));
 
 		RVAL_OK(init_ssd(&SSD_ctx, G_param, ssd_param->height, ssd_param->width));
+
 		ssd_net_result.dproc_ssd_result = (dproc_ssd_detection_output_result_t *)
 			malloc(SSD_ctx.vp_result_info.max_dproc_ssd_result_num *
 			sizeof(dproc_ssd_detection_output_result_t));
@@ -301,39 +336,81 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
 
 		while (run_flag) {
-			while(run_lpr > 0){
+			save_image_dir = save_process.get_image_save_dir();
+#if !defined(IS_LPR_RUN)
+			while(run_lpr > 0)
+#endif
+			{
+#if defined(OFFLINE_DATA)
+				cv::Mat src_image;
+				save_process.get_image(src_image);
+				if(src_image.empty())
+				{
+					LOG(ERROR) << "DeNet get image fail!";
+					break;
+				}
+				mat2tensor_bgr2yuv_nv12(src_image, img_tensor);
+				data.tensor_group[DEFAULT_SSD_LAYER_ID] = img_tensor;
+#else
 				RVAL_OK(ea_img_resource_hold_data(G_param->img_resource, &data));
 				RVAL_ASSERT(data.tensor_group != NULL);
 				RVAL_ASSERT(data.tensor_num >= 1);
-				img_tensor = data.tensor_group[G_param->ssd_pyd_idx];
+				img_tensor = data.tensor_group[DEFAULT_SSD_LAYER_ID];
+#endif
+				// std::cout << "ssd size:" << ea_tensor_shape(img_tensor)[0] << " " << ea_tensor_shape(img_tensor)[1] << " " << ea_tensor_shape(img_tensor)[2] << " " << ea_tensor_shape(img_tensor)[3] << std::endl;
 				dsp_pts = data.dsp_pts;
 				// SAVE_TENSOR_IN_DEBUG_MODE("SSD_pyd.jpg", img_tensor, debug_en);
-				if(frame_number % 80 == 0)
-				{
-					// std::stringstream filename;
-					// filename << "image_" << frame_number << ".jpg";
-					// std::cout << "tensor channel:" << ea_tensor_shape(img_tensor)[1] << std::endl;
-					// RVAL_OK(ea_tensor_to_jpeg(img_tensor, EA_TENSOR_COLOR_MODE_YUV_NV12, filename.str().c_str()));
-					has_lpr = 0;
-				}
+				// if(frame_number % 80 == 0)
+				// {
+				// 	has_lpr = 0;
+				// }
 				frame_number++;
 
 				start_time = gettimeus();
 
 #ifdef IS_SAVE
 				TIME_MEASURE_START(1);
-				RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
-				save_process.put_image_data(bgr);
+				// RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
+				// save_process.put_image_data(bgr);
+				std::stringstream filename_image;
+                filename_image << save_image_dir << "image_" << frame_number << ".jpg";
+				RVAL_OK(ea_tensor_to_jpeg(img_tensor, EA_TENSOR_COLOR_MODE_YUV_NV12, filename_image.str().c_str()));
 				TIME_MEASURE_END("[SSD] yuv to bgr time", 1);
 #endif
 
 				TIME_MEASURE_START(debug_en);
+				// std::cout << "ssd size:" << ea_tensor_shape(SSD_ctx.net_input.tensor)[2] << " " << ea_tensor_shape(SSD_ctx.net_input.tensor)[3] << " " << ea_tensor_pitch(SSD_ctx.net_input.tensor) << std::endl;
 				RVAL_OK(ea_cvt_color_resize(img_tensor, SSD_ctx.net_input.tensor,
 					EA_COLOR_YUV2BGR_NV12, EA_VP));
 				TIME_MEASURE_END("[SSD] preprocess time", debug_en);
 
 				TIME_MEASURE_START(debug_en);
-				RVAL_OK(ssd_net_run_vp_forward(&SSD_ctx.ssd_net_ctx));
+				if (G_param->abort_if_preempted) {
+					wait_vp_available(&G_param->vp_access_lock);
+				}
+				rval = ssd_net_run_vp_forward(&SSD_ctx.ssd_net_ctx);
+				if (rval < 0) {
+					if (rval == -EAGAIN) {
+						do {
+							if (G_param->abort_if_preempted) {
+								wait_vp_available(&G_param->vp_access_lock);
+							}
+							rval = ea_net_resume(SSD_ctx.ssd_net_ctx.net);
+							if (rval == -EINTR) {
+								printf("SSD network interrupt by signal in resume\n");
+								break;
+							}
+						} while (rval == -EAGAIN);
+					} else if (rval == -EINTR) {
+						printf("SSD network interrupt by signal in run\n");
+						break;
+					} else {
+						printf("ssd_net_run_vp_forward failed, ret: %d\n", rval);
+						rval = -1;
+						break;
+					}
+				}
+			
 				ea_tensor_sync_cache(SSD_ctx.ssd_net_ctx.output_loc_tensor, EA_VP, EA_CPU);
 				ea_tensor_sync_cache(SSD_ctx.ssd_net_ctx.output_conf_tensor, EA_VP, EA_CPU);
 				TIME_MEASURE_END("[SSD] network time", debug_en);
@@ -356,6 +433,13 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 				ssd_critical_resource(ssd_net_result.dproc_ssd_result, &data,
 					bbox_list.bbox_num, ssd_mid_buf, G_param);
 
+				if(bbox_list.bbox_num > 0)
+				{
+					has_lpr = 1;
+				}
+				LOG(WARNING) << "lpr box count:" << bbox_list.bbox_num;
+
+#ifdef IS_SHOW
 				for (i = 0; i < bbox_list.bbox_num; ++i) {
 					upscale_normalized_rectangle(ssd_net_result.dproc_ssd_result[i].bbox.x_min,
 					ssd_net_result.dproc_ssd_result[i].bbox.y_min,
@@ -367,12 +451,9 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 					bbox_list.bbox[i].norm_max_x = scaled_license_plate.norm_max_x;
 					bbox_list.bbox[i].norm_max_y = scaled_license_plate.norm_max_y;
 
-					has_lpr = 1;
+					// LOG(INFO) << "lpr :" << ssd_net_result.dproc_ssd_result[i].bbox.x_min << " " << ssd_net_result.dproc_ssd_result[i].bbox.y_min << " " << bbox_list.bbox[i].norm_max_x << " " << bbox_list.bbox[i].norm_max_y;
 				}
 
-				LOG(INFO) << "lpr box count:" << bbox_list.bbox_num;
-
-#ifdef IS_SHOW
 				RVAL_OK(set_overlay_bbox(&bbox_list));
 				RVAL_OK(show_overlay(dsp_pts));
 #endif
@@ -388,11 +469,6 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 			}
 			has_lpr = 0;
 			usleep(20000);
-#ifdef IS_SHOW
-			bbox_list.bbox_num = 0;
-			RVAL_OK(set_overlay_bbox(&bbox_list));
-		    RVAL_OK(show_overlay(dsp_pts));
-#endif
 		}
 	} while (0);
 	do {
@@ -411,7 +487,6 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 static void *run_denet_pthread(void *thread_params)
 {
 	int rval = 0;
-	uint32_t dsp_pts = 0;
 	uint64_t debug_time = 0;
 	std::vector<std::vector<float>> boxes;
     DeNet denet_process;
@@ -452,16 +527,15 @@ static void *run_denet_pthread(void *thread_params)
             float ymax = ymin + boxes[i][3];
             int type = boxes[i][4];
             float confidence = boxes[i][5];
-			bbox_list.bbox[i].norm_min_x = xmin;
-			bbox_list.bbox[i].norm_min_y = ymin;
-			bbox_list.bbox[i].norm_max_x = xmax;
-			bbox_list.bbox[i].norm_max_y = ymax;
-            std::cout << class_name[type] << " " << confidence << " " << xmin 
-                                << " " << ymin << " " << xmax << " " << ymax << "|";
+			bbox_list.bbox[i].norm_min_x = xmin / src_image.cols;
+			bbox_list.bbox[i].norm_min_y = ymin / src_image.rows;
+			bbox_list.bbox[i].norm_max_x = xmax / src_image.cols;
+			bbox_list.bbox[i].norm_max_y = ymax / src_image.rows;
+			LOG(WARNING) << "car :" << xmin << " " << ymin << " " << xmax << " " << ymax << " " << confidence;
 	    }
+		LOG(WARNING) << "car count:" <<bbox_list.bbox_num;
 #ifdef IS_SHOW
-		RVAL_OK(set_overlay_bbox(&bbox_list));
-		RVAL_OK(show_overlay(dsp_pts));
+		RVAL_OK(set_car_bbox(&bbox_list));
 #endif
 	}
 	run_denet = 0;
@@ -735,31 +809,36 @@ static int start_all(global_control_param_t *G_param)
 		RVAL_OK(ea_img_resource_hold_data(G_param->img_resource, &data));
 		RVAL_ASSERT(data.tensor_group != NULL);
 		RVAL_ASSERT(data.tensor_num >= 1);
-		img_tensor = data.tensor_group[G_param->lpr_pyd_idx];
+		img_tensor = data.tensor_group[DEFAULT_LPR_LAYER_ID];
 		lpr_thread_params.height = ea_tensor_shape(img_tensor)[2];
 		lpr_thread_params.width = ea_tensor_shape(img_tensor)[3];
 		lpr_thread_params.pitch = ea_tensor_pitch(img_tensor);
+		std::cout << "lpr:" << lpr_thread_params.height << " " << lpr_thread_params.width << " " << lpr_thread_params.pitch << std::endl;
 		lpr_thread_params.G_param = G_param;
-		img_tensor = data.tensor_group[G_param->ssd_pyd_idx];
+		img_tensor = data.tensor_group[DEFAULT_SSD_LAYER_ID];
 		ssd_thread_params.height = ea_tensor_shape(img_tensor)[2];
 		ssd_thread_params.width = ea_tensor_shape(img_tensor)[3];
 		ssd_thread_params.pitch = ea_tensor_pitch(img_tensor);
 		ssd_thread_params.G_param = G_param;
+		std::cout << "ssd:" << ssd_thread_params.height << " " << ssd_thread_params.width << " " << ssd_thread_params.pitch << std::endl;
 		RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, &data));
-#if !defined(OFFLINE_DATA)
 		rval = pthread_create(&ssd_pthread_id, NULL, run_ssd_pthread, (void*)&ssd_thread_params);
 		RVAL_ASSERT(rval == 0);
 		rval = pthread_create(&lpr_pthread_id, NULL, run_lpr_pthread, (void*)&lpr_thread_params);
 		RVAL_ASSERT(rval == 0);
-#endif
+
+#if defined(IS_DENET_RUN)
 		rval = pthread_create(&denet_pthread_id, NULL, run_denet_pthread, NULL);
 		RVAL_ASSERT(rval == 0);
+#endif
 		rval = pthread_create(&process_recv_pthread_id, NULL, process_recv_pthread, NULL);
 		RVAL_ASSERT(rval == 0);
 	} while (0);
 	LOG(INFO) << "start_ssd_lpr success";
 
+#if defined(IS_PC_RUN)
 	process_pc_pthread(G_param);
+#endif
 
 	if (lpr_pthread_id > 0) {
 		pthread_join(lpr_pthread_id, NULL);

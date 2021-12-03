@@ -34,6 +34,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  ******************************************************************************/
+#include <glog/logging.h>
+#include <glog/raw_logging.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,7 +46,8 @@
 #include <basetypes.h>
 #include <unistd.h>
 #include <eazyai.h>
-#include "ssd_lpr_common.h"
+#include <sys/prctl.h>
+#include "cnn_lpr/lpr/ssd_lpr_common.h"
 #include "overlay_tool.h"
 
 EA_LOG_DECLARE_LOCAL(EA_LOG_LEVEL_NOTICE);
@@ -68,6 +71,7 @@ typedef struct overlay_ctx_s {
 	pthread_mutex_t plate_mutex;
 	pthread_t overlay_pthread_id;
 	bbox_list_t bbox_list;
+	bbox_list_t car_bbox_list;
 	draw_plate_list_t draw_plate_list;
 	draw_plate_list_t final_plate_list;
 	ea_display_t *display;
@@ -100,8 +104,7 @@ static int plate_exchange(license_plate_t *dst_plate, license_plate_t *src_plate
 		dst_plate->bbox = src_plate->bbox;
 		RVAL_ASSERT(sizeof(src_plate->text) <= sizeof(dst_plate->text));
 		memset(dst_plate->text, 0, sizeof(dst_plate->text));
-		strcpy(dst_plate->text, src_plate->text);
-		dst_plate->text[sizeof(dst_plate->text) - 1] = '\0';
+		snprintf(dst_plate->text, sizeof(dst_plate->text), "%s", src_plate->text);
 	} while (0);
 
 	return rval;
@@ -235,11 +238,9 @@ int set_overlay_image(ea_tensor_t *complete_img, draw_plate_list_t* draw_plate_l
 				draw_plate_list->license_plate[i].conf;
 			memset(overlay_ctx.draw_plate_list.license_plate[i].text, 0,
 				sizeof(overlay_ctx.draw_plate_list.license_plate[i].text));
-			strncpy(overlay_ctx.draw_plate_list.license_plate[i].text,
-				draw_plate_list->license_plate[i].text,
-				sizeof(overlay_ctx.draw_plate_list.license_plate[i].text) - 1);
-			overlay_ctx.draw_plate_list.license_plate[i].text[
-				sizeof(overlay_ctx.draw_plate_list.license_plate[i].text) - 1] = '\0';
+			snprintf(overlay_ctx.draw_plate_list.license_plate[i].text,
+				sizeof(overlay_ctx.draw_plate_list.license_plate[i].text),
+				"%s", draw_plate_list->license_plate[i].text);
 			overlay_ctx.draw_plate_list.license_plate[i].timestamp = gettimeus();
 		}
 		overlay_ctx.draw_plate_list.license_num = min(old_list_num + add_list_num,
@@ -275,6 +276,8 @@ static void * show_overlay_thread(void* overlay_thread_param)
 	struct timespec outtime;
 	struct timeval now;
 
+	prctl(PR_SET_NAME, "show_overlay_thread");
+
 	while (overlay_ctx.run_flag) {
 		pthread_mutex_lock(&overlay_ctx.plate_mutex);
 		RVAL_OK(sort_list_by_timestamp(&overlay_ctx.draw_plate_list));
@@ -284,10 +287,9 @@ static void * show_overlay_thread(void* overlay_thread_param)
 				sizeof(overlay_ctx.final_plate_list.license_plate[i].text));
 			memset(overlay_ctx.final_plate_list.license_plate[i].text, 0,
 				sizeof(overlay_ctx.final_plate_list.license_plate[i].text));
-			strcpy(overlay_ctx.final_plate_list.license_plate[i].text,
-				overlay_ctx.draw_plate_list.license_plate[i].text);
-			overlay_ctx.final_plate_list.license_plate[i].text[sizeof(
-				overlay_ctx.final_plate_list.license_plate[i].text) - 1] = '\0';
+			snprintf(overlay_ctx.final_plate_list.license_plate[i].text,
+				sizeof(overlay_ctx.final_plate_list.license_plate[i].text),
+				"%s", overlay_ctx.draw_plate_list.license_plate[i].text);
 			RVAL_ASSERT(ea_tensor_size(overlay_ctx.draw_plate_list.license_plate[i].img_tensor) <=
 				ea_tensor_size(overlay_ctx.final_plate_list.license_plate[i].img_tensor));
 			memcpy(ea_tensor_data(overlay_ctx.final_plate_list.license_plate[i].img_tensor),
@@ -337,8 +339,8 @@ static void * show_overlay_thread(void* overlay_thread_param)
 				&overlay_ctx.bbox_mutex, &outtime);
 			if (rval == ETIMEDOUT) {
 				printf("%s, line %d: wait time out, quit.\n", __FUNCTION__, __LINE__);
-				overlay_ctx.run_flag = 0;
-				rval = -1;
+				// overlay_ctx.run_flag = 0;
+				// rval = -1;
 				break;
 			}
 		}
@@ -352,13 +354,20 @@ static void * show_overlay_thread(void* overlay_thread_param)
 				overlay_ctx.bbox_list.bbox[i].norm_max_x - overlay_ctx.bbox_list.bbox[i].norm_min_x,
 				overlay_ctx.bbox_list.bbox[i].norm_max_y - overlay_ctx.bbox_list.bbox[i].norm_min_y));
 		}
+		for (i = 0; i < overlay_ctx.car_bbox_list.bbox_num; ++i) {
+			RVAL_OK(ea_display_set_bbox(overlay_ctx.display, "car",
+				overlay_ctx.car_bbox_list.bbox[i].norm_min_x, overlay_ctx.car_bbox_list.bbox[i].norm_min_y,
+				overlay_ctx.car_bbox_list.bbox[i].norm_max_x - overlay_ctx.car_bbox_list.bbox[i].norm_min_x,
+				overlay_ctx.car_bbox_list.bbox[i].norm_max_y - overlay_ctx.car_bbox_list.bbox[i].norm_min_y));
+		}
 		RVAL_OK(ea_display_refresh(overlay_ctx.display, (void *)(uint64_t)overlay_ctx.dsp_pts));
 		pthread_mutex_unlock(&overlay_ctx.bbox_mutex);
 	}
 	if (rval < 0) {
 		pthread_mutex_unlock(&overlay_ctx.bbox_mutex);
 	}
-	EA_LOG_NOTICE("show_overlay_thread quit.\n");
+
+	LOG(WARNING) << "show_overlay_thread quit.";
 
 	return NULL;
 }
@@ -372,6 +381,24 @@ int show_overlay(uint32_t dsp_pts)
 		overlay_ctx.dsp_pts = dsp_pts;
 		overlay_ctx.update_cond_flag = 1;
 		pthread_cond_signal(&overlay_ctx.update_cond);
+		pthread_mutex_unlock(&overlay_ctx.bbox_mutex);
+	} while (0);
+
+	return rval;
+}
+
+int set_car_bbox(bbox_list_t *bbox_list)
+{
+	int rval = 0;
+	uint32_t i = 0;
+
+	do {
+		RVAL_ASSERT(bbox_list != NULL);
+		pthread_mutex_lock(&(overlay_ctx.bbox_mutex));
+		overlay_ctx.car_bbox_list.bbox_num = bbox_list->bbox_num;
+		for (i = 0; i < bbox_list->bbox_num; ++i) {
+			overlay_ctx.car_bbox_list.bbox[i] = bbox_list->bbox[i];
+		}
 		pthread_mutex_unlock(&overlay_ctx.bbox_mutex);
 	} while (0);
 

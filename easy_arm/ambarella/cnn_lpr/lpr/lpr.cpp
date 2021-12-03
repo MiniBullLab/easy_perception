@@ -102,6 +102,7 @@ static void lpr_result_analyse(ea_tensor_t *tensor,
 			j * ea_tensor_shape(tensor)[1] * ea_tensor_shape(tensor)[2] * ea_tensor_pitch(tensor));
 		network_output = network_output.reshape(1, class_num);
 		cv::transpose(network_output, network_output);
+		// std::cout << "network_output:" << network_output.rows  << " " << network_output.cols << std::endl;
 		index_conf_list.clear();
 		for (i = 0; i < MAX_LICENSE_LENGTH; ++i) {
 			period_start_pos = ((float *) (network_output.data) + i * class_num);
@@ -129,19 +130,48 @@ static void lpr_result_analyse(ea_tensor_t *tensor,
 		} else {
 			i = 0;
 		}
-		while (i < index_conf_list.size()) {
-			license_text += mapping_table[index_conf_list[i].first];
-			conf_sum += index_conf_list[i].second;
-			++length_count;
-			++i;
+
+		float avg_confidence = 0.00f;
+
+		for (int i = 1; i < 6; i++)
+		{
+			avg_confidence += index_conf_list[index_conf_list.size() - i - 1].second;
 		}
+
+
+		int target_length = index_conf_list.size();
+
+		float thres_confidence = avg_confidence*0.85 / 5.0;
+
+		if (index_conf_list[index_conf_list.size() - 1].second < thres_confidence && index_conf_list[index_conf_list.size() - 1].first == 31)
+		{
+			target_length--;
+		}
+
+		for (; i < MIN(8, target_length); i++)
+        {
+            if(i!=index_conf_list.size()-1||index_conf_list[i].second>0.0) {
+				license_text += mapping_table[index_conf_list[i].first];
+				conf_sum += index_conf_list[i].second;
+				++length_count;
+            }
+        }
+
+		// while (i < index_conf_list.size()) {
+		// 	license_text += mapping_table[index_conf_list[i].first];
+		// 	conf_sum += index_conf_list[i].second;
+		// 	++length_count;
+		// 	++i;
+		// }
+
 		memset(license_result->license_info[j].text, 0,
 			sizeof(license_result->license_info[j].text));
-		strncpy(license_result->license_info[j].text,
-			license_text.c_str(), sizeof(license_result->license_info[j].text) - 1);
-		license_result->license_info[j].text[sizeof(license_result->license_info[j].text) - 1] = '\0';
+		snprintf(license_result->license_info[j].text, sizeof(license_result->license_info[j].text),
+			"%s", license_text.c_str());
 		license_result->license_info[j].conf = conf_sum / length_count;
 		++license_result->license_num;
+
+		// std::cout << "license_text:" << license_text << " " << license_result->license_info[j].conf << std::endl;
 	}
 
 	return;
@@ -149,7 +179,7 @@ static void lpr_result_analyse(ea_tensor_t *tensor,
 
 static int LPR_init_network(LPR_net_ctx_t *LPR_net_ctx)
 {
-	int rval = 0;
+	int rval = EA_SUCCESS;
 
 	do {
 		LPR_net_ctx->net_param.print_time = !!LPR_net_ctx->net_verbose;
@@ -183,7 +213,7 @@ int LPR_init(LPR_ctx_t *LPR_ctx)
 	int i, rval = 0;
 	size_t rgb_shape[4] = {1, 3, LPR_ctx->img_h, LPR_ctx->img_w};
 	size_t cropped_rgb_shape[4] = {1, 3, LICENSE_PREPROC_RESIZE_H, LICENSE_PREPROC_RESIZE_W};
-	size_t cropped_mat_shape[4] = {1, 1, LICENSE_PREPROC_RESIZE_H, LICENSE_PREPROC_RESIZE_W * 3};;
+	size_t cropped_mat_shape[4] = {1, 1, LICENSE_PREPROC_RESIZE_H, LICENSE_PREPROC_RESIZE_W * 3};
 
 	do {
 		RVAL_ASSERT(LPR_ctx != NULL);
@@ -201,7 +231,6 @@ int LPR_init(LPR_ctx_t *LPR_ctx)
 			RVAL_ASSERT(LPR_ctx->cropped_rgb_img[i] != NULL);
 			RVAL_ASSERT(LPR_ctx->cropped_mat_img[i] != NULL);
 		}
-
 	} while (0);
 
 	if (rval < 0) {
@@ -234,23 +263,15 @@ void LPR_deinit(LPR_ctx_t *LPR_ctx)
 	return;
 }
 
-int LPR_run(LPR_ctx_t *LPR_ctx, ea_tensor_t *input_tensor, uint16_t license_num,
-	void *bbox_param_p, license_list_t *license_result)
+int LPR_run_vp_preprocess(LPR_ctx_t *LPR_ctx, ea_tensor_t *input_tensor,
+	uint16_t license_num, void *bbox_param_p)
 {
-	int rval = 0;
+	int rval = EA_SUCCESS;
 	uint16_t i = 0;
-	bbox_param_t scaled_bbox_recg[MAX_DETECTED_LICENSE_NUM];
-	ea_roi_t roi_group[MAX_DETECTED_LICENSE_NUM];
-	cv::Mat deskrewed_img;
-	std::vector<cv::Mat> deskrewed_img_list;
-	uint32_t start_pos = 0, end_pos = 0;
-	float *mapping_output = NULL;
 	uint64_t debug_time = 0;
 	bbox_param_t *bbox_param = NULL;
-	pr::PipelinePR *prc = NULL;
-	ea_tensor_t *net_input_tensor = NULL;
-	ea_tensor_t *net_output_tensor = NULL;
-	uint64_t step_size = 0;
+	bbox_param_t scaled_bbox_recg[MAX_DETECTED_LICENSE_NUM];
+	ea_roi_t roi_group[MAX_DETECTED_LICENSE_NUM];
 
 	do {
 		if (license_num == 0) {
@@ -259,10 +280,7 @@ int LPR_run(LPR_ctx_t *LPR_ctx, ea_tensor_t *input_tensor, uint16_t license_num,
 		RVAL_ASSERT(LPR_ctx != NULL);
 		RVAL_ASSERT(input_tensor != NULL);
 		RVAL_ASSERT(bbox_param_p != NULL);
-		RVAL_ASSERT(license_result != NULL);
-		RVAL_ASSERT(LPR_ctx->prc != NULL);
 		bbox_param = (bbox_param_t *)bbox_param_p;
-		prc = (pr::PipelinePR *)LPR_ctx->prc;
 		SAVE_TENSOR_IN_DEBUG_MODE("LPR_pyd.jpg", input_tensor, LPR_ctx->debug_en);
 
 		// convert input YUV image to BRG format
@@ -293,12 +311,6 @@ int LPR_run(LPR_ctx_t *LPR_ctx, ea_tensor_t *input_tensor, uint16_t license_num,
 			license_num, roi_group, EA_TENSOR_COLOR_MODE_BGR, EA_VP));
 		TIME_MEASURE_END("[LPR] rgb crop roi time", LPR_ctx->debug_en);
 
-		deskrewed_img_list.clear();
-		net_input_tensor = LPR_ctx->LPHM_net_ctx.input_tensor;
-		step_size = ea_tensor_shape(net_input_tensor)[1] *
-			ea_tensor_shape(net_input_tensor)[2] *
-			ea_tensor_pitch(net_input_tensor);
-
 		// convert to BGR interleave for cv::Mat mem format
 		for (i = 0; i < license_num; ++i) {
 			TIME_MEASURE_START(LPR_ctx->debug_en);
@@ -309,6 +321,35 @@ int LPR_run(LPR_ctx_t *LPR_ctx, ea_tensor_t *input_tensor, uint16_t license_num,
 			SAVE_TENSOR_GROUP_IN_DEBUG_MODE("LPR_cropped_mat", i,
 				LPR_ctx->cropped_mat_img[i], LPR_ctx->debug_en);
 		}
+	} while (0);
+
+	return rval;
+}
+
+int LPR_run_arm_preprocess(LPR_ctx_t *LPR_ctx, uint16_t license_num)
+{
+	int rval = EA_SUCCESS;
+	uint16_t i = 0;
+	cv::Mat deskrewed_img;
+	uint64_t debug_time = 0;
+	pr::PipelinePR *prc = NULL;
+	ea_tensor_t *net_input_tensor = NULL;
+	uint64_t step_size = 0;
+
+	do {
+		if (license_num == 0) {
+			break;
+		}
+		RVAL_ASSERT(LPR_ctx != NULL);
+		RVAL_ASSERT(LPR_ctx->prc != NULL);
+
+		license_num = min(MAX_DETECTED_LICENSE_NUM, license_num);
+		LPR_ctx->deskrewed_img_list.clear();
+		prc = (pr::PipelinePR *)LPR_ctx->prc;
+		net_input_tensor = LPR_ctx->LPHM_net_ctx.input_tensor;
+		step_size = ea_tensor_shape(net_input_tensor)[1] *
+			ea_tensor_shape(net_input_tensor)[2] *
+			ea_tensor_pitch(net_input_tensor);
 
 		// descrew the license plate image
 		for (i = 0; i < license_num; ++i) {
@@ -317,7 +358,7 @@ int LPR_run(LPR_ctx_t *LPR_ctx, ea_tensor_t *input_tensor, uint16_t license_num,
 				(uint8_t*)ea_tensor_data(LPR_ctx->cropped_mat_img[i]),
 				ea_tensor_pitch(LPR_ctx->cropped_mat_img[i]));
 			deskrewed_img = prc->fineMapping->FineMappingVertical(cropped_img);
-			deskrewed_img_list.push_back(deskrewed_img);
+			LPR_ctx->deskrewed_img_list.push_back(deskrewed_img);
 			TIME_MEASURE_END("[LPR] deskrew time", LPR_ctx->debug_en);
 			SAVE_MAT_GROUP_IN_DEBUG_MODE("LPR_deskrewed", i, deskrewed_img, LPR_ctx->debug_en);
 
@@ -330,9 +371,30 @@ int LPR_run(LPR_ctx_t *LPR_ctx, ea_tensor_t *input_tensor, uint16_t license_num,
 				i * step_size), 1, 1);
 			TIME_MEASURE_END("[LPR] mat resize & to rgb time", LPR_ctx->debug_en);
 		}
-		if (rval < 0) {
+	} while (0);
+
+	return rval;
+}
+
+int LPR_run_vp_recognition(LPR_ctx_t *LPR_ctx, uint16_t license_num, license_list_t *license_result)
+{
+	int rval = EA_SUCCESS;
+	uint16_t i = 0;
+	cv::Mat deskrewed_img;
+	uint32_t start_pos = 0, end_pos = 0;
+	float *mapping_output = NULL;
+	uint64_t debug_time = 0;
+	ea_tensor_t *net_input_tensor = NULL;
+	ea_tensor_t *net_output_tensor = NULL;
+	uint64_t step_size = 0;
+
+	do {
+		if (license_num == 0) {
 			break;
 		}
+		RVAL_ASSERT(LPR_ctx != NULL);
+		RVAL_ASSERT(license_result != NULL);
+		license_num = min(MAX_DETECTED_LICENSE_NUM, license_num);
 		// detect license plate horizontal edge
 		TIME_MEASURE_START(LPR_ctx->debug_en);
 		RVAL_OK(ea_tensor_sync_cache(LPR_ctx->LPHM_net_ctx.input_tensor, EA_CPU, EA_VP));
@@ -347,7 +409,7 @@ int LPR_run(LPR_ctx_t *LPR_ctx, ea_tensor_t *input_tensor, uint16_t license_num,
 			ea_tensor_pitch(net_input_tensor);
 		net_output_tensor = LPR_ctx->LPHM_net_ctx.output_tensor;
 		for (i = 0; i < license_num; ++i) {
-			deskrewed_img = deskrewed_img_list[i];
+			deskrewed_img = LPR_ctx->deskrewed_img_list[i];
 			mapping_output = (float*)((uint64_t)
 				ea_tensor_data(net_output_tensor) +
 				i * ea_tensor_shape(net_output_tensor)[1] *
@@ -383,4 +445,5 @@ int LPR_run(LPR_ctx_t *LPR_ctx, ea_tensor_t *input_tensor, uint16_t license_num,
 
 	return rval;
 }
+
 

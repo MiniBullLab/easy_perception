@@ -59,6 +59,8 @@ public:
 
     int set_save_dir(const std::string &image_path, const std::string &tof_path);
 
+    std::string get_image_save_dir();
+
     int start();
     int stop();
 
@@ -78,6 +80,8 @@ public:
     void save_image(cv::Mat &src_image);
     void save_depth_map(cv::Mat &depth_map);
     void save_tof_z(const unsigned char* tof_data);
+
+    // void save_image_tensor(ea_tensor_t *img_tensor);
 
 private:
     pthread_t image_pthread_id;

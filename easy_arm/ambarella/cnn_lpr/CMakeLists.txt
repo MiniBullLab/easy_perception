@@ -35,6 +35,7 @@ file(GLOB LPR_SRCS
     "${PROJECT_SOURCE_DIR}/lpr_third_party/FastDeskew.cpp"
     "${PROJECT_SOURCE_DIR}/lpr_third_party/Pipeline.cpp"
     "${PROJECT_SOURCE_DIR}/tof/*.cpp"
+    "${PROJECT_SOURCE_DIR}/show/*.cpp"
 	)
 
 target_sources(test_lpr

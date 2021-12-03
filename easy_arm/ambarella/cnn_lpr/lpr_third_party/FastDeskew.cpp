@@ -227,7 +227,7 @@ namespace pr{
 
     std::vector<float> avgfilter(std::vector<float> angle_list,int windowsSize) {
         std::vector<float> angle_list_filtered(angle_list.size() - windowsSize + 1);
-        for (int i = 0; i < angle_list.size() - windowsSize + 1; i++) {
+        for (size_t i = 0; i < angle_list.size() - windowsSize + 1; i++) {
             float avg = 0.00f;
             for (int j = 0; j < windowsSize; j++) {
                 avg += angle_list[i + j];
@@ -244,7 +244,7 @@ namespace pr{
         cv::Mat image(300,seq.size(),CV_8U);
         image.setTo(0);
 
-        for(int i = 0;i<seq.size();i++)
+        for(size_t i = 0;i<seq.size();i++)
         {
             float l = *std::max_element(seq.begin(),seq.end());
 

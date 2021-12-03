@@ -1,5 +1,12 @@
 #include "det_process.h"
 
+#define DEFAULT_SSD_CLASS_NUM		(2) /* For license and background */
+#define DEFAULT_BACKGROUND_ID		(0)
+#define DEFAULT_KEEP_TOP_K			(50)
+#define DEFAULT_NMS_TOP_K			(100)
+#define DEFAULT_NMS_THRES			(0.45f)
+#define DEFAULT_SSD_CONF_THRES		(0.3f)
+
 const static std::string ssd_model_path = "/data/lpr/mobilenetv1_ssd_cavalry.bin";
 const static std::string ssd_priorbox_path = "/data/lpr/lpr_priorbox_fp32.bin";
 const static std::vector<std::string> ssd_input_name = {"data"};
@@ -39,16 +46,17 @@ int init_ssd(SSD_ctx_t *SSD_ctx, global_control_param_t *G_param,
 		ssd_net_params.output_conf = ssd_output_name[1].c_str();
 		ssd_net_params.width = buffer_w;
 		ssd_net_params.height = buffer_h;
-		ssd_net_params.conf_threshold = G_param->conf_threshold;
-		ssd_net_params.keep_top_k = G_param->keep_top_k;
-		ssd_net_params.nms_threshold = G_param->nms_threshold;
-		ssd_net_params.nms_top_k = G_param->nms_top_k;
-		ssd_net_params.background_label_id = G_param->background_label_id;
+		ssd_net_params.conf_threshold = DEFAULT_SSD_CONF_THRES;
+		ssd_net_params.keep_top_k = DEFAULT_KEEP_TOP_K;
+		ssd_net_params.nms_threshold = DEFAULT_NMS_THRES;
+		ssd_net_params.nms_top_k = DEFAULT_NMS_TOP_K;
+		ssd_net_params.background_label_id = DEFAULT_BACKGROUND_ID;
 		ssd_net_params.unnormalized = 0;
-		ssd_net_params.class_num = G_param->num_classes;
+		ssd_net_params.class_num = DEFAULT_SSD_CLASS_NUM;
 		ssd_net_params.priority = SSD_PRIORITY;
 		ssd_net_params.debug_en = (G_param->debug_en >= INFO_LEVEL);
 		ssd_net_params.nnctrl_print_time = (G_param->verbose);
+		ssd_net_params.abort_if_preempted = G_param->abort_if_preempted;
 		scale_factors.center_x_scale = 0;
 		scale_factors.center_y_scale = 0;
 		scale_factors.height_scale = 0;

@@ -112,7 +112,7 @@ void draw_overlay_preprocess(draw_plate_list_t *draw_plate_list,
 
 	license_result->license_num = min(license_result->license_num, MAX_OVERLAY_PLATE_NUM);
 	for (i = 0; i < license_result->license_num; ++i) {
-		if (license_info[i].conf > G_param->recg_threshold &&
+		if (license_info[i].conf > DEFAULT_LPR_CONF_THRES &&
 			strlen(license_info[i].text) == CHINESE_LICENSE_STR_LEN) {
 			upscale_normalized_rectangle(bbox_param[i].norm_min_x, bbox_param[i].norm_min_y,
 			bbox_param[i].norm_max_x, bbox_param[i].norm_max_y,
@@ -123,8 +123,7 @@ void draw_overlay_preprocess(draw_plate_list_t *draw_plate_list,
 			plates[draw_num].bbox.norm_max_y = scaled_bbox_draw[i].norm_max_y;
 			plates[draw_num].conf = license_info[i].conf;
 			memset(plates[draw_num].text, 0, sizeof(plates[draw_num].text));
-			strncpy(plates[draw_num].text, license_info[i].text,
-				sizeof(plates[draw_num].text));
+			snprintf(plates[draw_num].text, sizeof(plates[draw_num].text), "%s", license_info[i].text);
 			plates[draw_num].text[sizeof(plates[draw_num].text) - 1] = '\0';
 			++draw_num;
 			if (G_param->debug_en > 0) {

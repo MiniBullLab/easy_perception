@@ -55,7 +55,7 @@
 	} while (0)
 
 #define DEAFULT_CLASS_NUM	(21)
-static const char default_class_names[DEAFULT_CLASS_NUM][SSD_NET_MAX_LABEL_LEN] = {"background",
+static const char *default_class_names[DEAFULT_CLASS_NUM] = {"background",
 							"aeroplane", "bicycle", "bird", "boat",
 							"bottle", "bus", "car", "cat", "chair",
 							"cow", "diningtable", "dog", "horse",
@@ -149,6 +149,7 @@ static int get_label_from_file(const char *label_file, char (*labels)[SSD_NET_MA
 {
 	int rval = 0;
 	uint32_t label_count = 0;
+	int32_t len = 0, file_len = 0;
 	FILE *fp_label = NULL;
 	char *label_line_start = NULL;
 	char *label_line_end = NULL;
@@ -163,13 +164,33 @@ static int get_label_from_file(const char *label_file, char (*labels)[SSD_NET_MA
 			break;
 		}
 
-		while (!feof(fp_label) && (label_count < SSD_NET_MAX_LABEL_NUM)) {
+		rval = fseek(fp_label, 0L, SEEK_END);
+		if (rval != 0) {
+			printf("fseek to end failed !\n");
+			rval = -1;
+			break;
+		}
+		file_len = ftell(fp_label);
+		if (file_len <= 0) {
+			printf("Error: get file size is [%d]!\n", file_len);
+			rval = -1;
+			break;
+		}
+		rval = fseek(fp_label, 0L, SEEK_SET);
+		if (rval != 0) {
+			printf("fseek to start failed !\n");
+			rval = -1;
+			break;
+		}
+
+		while(len != file_len) {
 			memset(label_line, 0, SSD_NET_MAX_LABEL_LEN);
 			if (fgets(label_line, SSD_NET_MAX_LABEL_LEN, fp_label) == NULL) { //Read a line
 				printf("fgets error !\n");
 				rval = -1;
 				break;
 			}
+			len = ftell(fp_label);
 
 			// SSD_NET_MAX_LABEL_LEN is too small, fp_label may be truncated.
 			if (strlen(label_line) >= SSD_NET_MAX_LABEL_LEN - 1) {
@@ -183,14 +204,18 @@ static int get_label_from_file(const char *label_file, char (*labels)[SSD_NET_MA
 			label_line_end = strrchr(label_line, '\'');
 			if (label_line_start && label_line_end && (label_line_end > label_line_start + 1)) {
 				*label_line_end = '\0';
-				strcpy(labels[label_count], label_line_start + 1);
+				snprintf(labels[label_count], SSD_NET_MAX_LABEL_LEN, "%s", label_line_start + 1);
+				label_count++;
 			} else {
-				printf("label file[%s] format error !\n", label_file);
+				printf("[Warning] %s don't satisfy label's format, it will be ignored !\n", label_line);
+				continue;
+			}
+
+			if ((label_count >= SSD_NET_MAX_LABEL_NUM) && (len != file_len)) {
+				printf("The number of label exceeds the maximum %d !\n", SSD_NET_MAX_LABEL_NUM);
 				rval = -1;
 				break;
 			}
-
-			label_count++;
 		}
 
 		if (rval < 0) {
@@ -417,6 +442,7 @@ int ssd_net_init(const ssd_net_params_t *params, ssd_net_ctx_t *ssd_net_ctx,
 		ssd_net_ctx->height = params->height;
 		ssd_net_ctx->scale_factors = params->scale_factors;
 
+		net_param.abort_if_preempted = params->abort_if_preempted;
 		net_param.priority = params->priority;
 		net_param.print_time = params->nnctrl_print_time;
 		ssd_net_ctx->net = ea_net_new(&net_param);
@@ -473,7 +499,7 @@ int ssd_net_init(const ssd_net_params_t *params, ssd_net_ctx_t *ssd_net_ctx,
 		}
 
 		// get label from file
-		memset(ssd_net_ctx->labels, 0, SSD_NET_MAX_LABEL_NUM * SSD_NET_MAX_LABEL_LEN);
+		memset(ssd_net_ctx->labels, 0, sizeof(ssd_net_ctx->labels));
 		if (params->label_path != NULL && strlen(params->label_path) != 0) {
 			if (get_label_from_file(params->label_path, ssd_net_ctx->labels,
 				&label_count) < 0) {
@@ -483,7 +509,8 @@ int ssd_net_init(const ssd_net_params_t *params, ssd_net_ctx_t *ssd_net_ctx,
 			}
 		} else {
 			for (i = 0; i < DEAFULT_CLASS_NUM; i++) {
-				strcpy(ssd_net_ctx->labels[i], default_class_names[i]);
+				memset(ssd_net_ctx->labels[i], 0, sizeof(ssd_net_ctx->labels[i]));
+				snprintf(ssd_net_ctx->labels[i], sizeof(ssd_net_ctx->labels[i]), "%s", default_class_names[i]);
 			}
 		}
 
@@ -524,13 +551,7 @@ int ssd_net_run_vp_forward(ssd_net_ctx_t *ssd_net_ctx)
 {
 	int rval = 0;
 
-	do {
-		if (ea_net_forward(ssd_net_ctx->net, 1/*batch*/) < 0) {
-			printf("ea_net_forward for ssd failed !\n");
-			rval = -1;
-			break;
-		}
-	} while (0);
+	rval = ea_net_forward(ssd_net_ctx->net, 1);
 
 	return rval;
 }

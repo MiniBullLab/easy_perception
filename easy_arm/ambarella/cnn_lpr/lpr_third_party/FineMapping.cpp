@@ -362,7 +362,7 @@ namespace pr{
             int leftyA = B.first;
             int rightyA = B.second;
             int cols = rgb.cols;
-            int rows = rgb.rows;
+            //int rows = rgb.rows;
             std::vector<cv::Point2f> corners(4);
             corners[0] = cv::Point2f(cols - 1, rightyA);
             corners[1] = cv::Point2f(0, leftyA);

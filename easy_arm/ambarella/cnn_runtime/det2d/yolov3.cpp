@@ -10,7 +10,7 @@
 #define YOLO_NET_IN_WIDTH (416)
 #define g_anchorCnt (3)
 #define NMS_THRESHOLD (0.45f)
-#define CONF (0.24f)
+#define CONF (0.4f)
 
 // const std::vector<float> g_anchors{8.95, 8.57, 12.43, 26.71, 19.71, 14.43,
 //                                  26.36, 58.52, 36.09, 25.55, 64.42, 42.90,

@@ -286,12 +286,12 @@ static void *save_image_pthread(void* save_data)
         if(!src_image.empty())
         {
             cv::imwrite(filename_image.str(), src_image);
+            frame_number++;
         }
         else
         {
             LOG(ERROR) << "save src image empty: " << filename_image.str();
         }
-        frame_number++;
         image_buffer.readpos++;  
         if (image_buffer.readpos >= SAVE_IMAGE_BUFFER_SIZE)  
             image_buffer.readpos = 0; 
@@ -319,12 +319,12 @@ static void *save_tof_pthread(void* save_data)
         if(!depth_map.empty())
         {
             cv::imwrite(filename_tof.str(), depth_map);
+            frame_number++;
         }
         else
         {
             LOG(ERROR) << "save depth map empty: " << filename_tof.str();
         }
-        frame_number++;
         tof_buffer.readpos++;  
         if (tof_buffer.readpos >= SAVE_TOF_BUFFER_SIZE)  
             tof_buffer.readpos = 0; 
@@ -547,6 +547,11 @@ int SaveDataProcess::set_save_dir(const std::string &image_path, const std::stri
     save_image_dir = image_path;
     save_tof_dir = tof_path;
     return 0;
+}
+
+std::string SaveDataProcess::get_image_save_dir()
+{
+    return save_image_dir;
 }
 
 int SaveDataProcess::start()
@@ -772,12 +777,12 @@ void SaveDataProcess::save_image(cv::Mat &src_image)
         // outF.write(reinterpret_cast<char*>(src_image.data), IMAGE_WIDTH * IMAGE_HEIGHT * 3 * sizeof(uchar));
         // outF.close();
         cv::imwrite(filename_image.str(), src_image);
+        image_frame_number++;
     }
     else
     {
         LOG(ERROR) << "save src image empty: " << filename_image.str();
     }
-    image_frame_number++;
 }
 
 void SaveDataProcess::save_depth_map(cv::Mat &depth_map)
@@ -792,12 +797,12 @@ void SaveDataProcess::save_depth_map(cv::Mat &depth_map)
         outF.write(reinterpret_cast<char*>(depth_map.data), DEPTH_WIDTH * DEPTH_HEIGTH * sizeof(uchar));
         outF.close();
         cv::imwrite(temp_tof.str(), depth_map);
+        tof_frame_number++;
     }
     else
     {
         LOG(ERROR) << "save depth map empty: " << filename_tof.str();
     }
-    tof_frame_number++;
 }
 
 void SaveDataProcess::save_tof_z(const unsigned char* tof_data)
@@ -809,3 +814,19 @@ void SaveDataProcess::save_tof_z(const unsigned char* tof_data)
     outF.close();
     tof_frame_number++;
 }
+
+// void SaveDataProcess::save_image_tensor(ea_tensor_t *img_tensor)
+// {
+//     int rval = 0;
+//     std::stringstream filename_image;
+//     filename_image << save_image_dir << "image_" << image_frame_number << ".jpg";
+//     if(img_tensor != NULL)
+//     {
+//        rval = ea_tensor_to_jpeg(img_tensor, EA_TENSOR_COLOR_MODE_YUV_NV12, filename_image.str().c_str());
+//        image_frame_number++;
+//     }
+//     else
+//     {
+//         LOG(ERROR) << "save src image fail: " << filename_image.str();
+//     }
+// }

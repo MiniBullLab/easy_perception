@@ -73,11 +73,15 @@ typedef struct LPR_ctx_s {
 	ea_tensor_t *rgb_img;
 	ea_tensor_t *cropped_rgb_img[MAX_DETECTED_LICENSE_NUM];
 	ea_tensor_t *cropped_mat_img[MAX_DETECTED_LICENSE_NUM];
+	std::vector<cv::Mat> deskrewed_img_list;
 } LPR_ctx_t;
 
 int LPR_init(LPR_ctx_t *LPR_ctx);
 void LPR_deinit(LPR_ctx_t *LPR_ctx);
-int LPR_run(LPR_ctx_t *LPR_ctx, ea_tensor_t *input_tensor, uint16_t license_num,
-	void *bbox_param, license_list_t *license_result);
+int LPR_run_vp_preprocess(LPR_ctx_t *LPR_ctx, ea_tensor_t *input_tensor,
+	uint16_t license_num, void *bbox_param_p);
+int LPR_run_arm_preprocess(LPR_ctx_t *LPR_ctx, uint16_t license_num);
+int LPR_run_vp_recognition(LPR_ctx_t *LPR_ctx, uint16_t license_num, license_list_t *license_result);
+
 #endif
 
