@@ -88,34 +88,33 @@ int compute_depth_map(const cv::Mat &bg_map, const cv::Mat &depth_map)
 
 int vote_in_out(const std::vector<int> &point_cout_list)
 {
-	int result = -1;
+	int result = 0;
 	int diff_count = 0;
 	int all_count = 0;
 	size_t point_size = point_cout_list.size();
-	if(point_size == 1)
+	if(point_size > 5)
 	{
-		all_count = 0 - point_cout_list[0];
-	}
-	for(size_t i = 1; i < point_cout_list.size();i++)
-	{
-		diff_count = point_cout_list[i] - point_cout_list[i-1];
-		if(diff_count > 20)
+		for(size_t i = 1; i < point_cout_list.size();i++)
 		{
-			all_count += diff_count * 3;
-		}
-		else if(diff_count < -20)
-		{
-			all_count += (diff_count / 3);
-		}
+			diff_count = point_cout_list[i] - point_cout_list[i-1];
+			if(diff_count > 20)
+			{
+				all_count += diff_count * 3;
+			}
+			else if(diff_count < -20)
+			{
+				all_count += (diff_count / 3);
+			}
+		}	
 	}
 	
 	if(all_count > 0)
 	{
-		return 0;
+		result = 1;
 	}
 	else if(all_count < 0)
 	{
-		return 1;
+		result = 2;
 	}
 	return result;
 }

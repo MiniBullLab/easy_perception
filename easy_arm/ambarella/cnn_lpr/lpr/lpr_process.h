@@ -5,6 +5,8 @@
 #include "cnn_lpr/lpr/lpr.hpp"
 #include "cnn_lpr/lpr/det_process.h"
 
+#include "cnn_lpr/clustering/clustering_rect.h"
+
 #define DEFAULT_LPR_CONF_THRES		(0.9f)
 #define CHINESE_LICENSE_STR_LEN		(9)
 #define DRAW_LICNESE_UPSCALE_H		(1.0f)
@@ -22,5 +24,8 @@ int init_LPR(LPR_ctx_t *LPR_ctx, global_control_param_t *G_param);
 
 void draw_overlay_preprocess(draw_plate_list_t *draw_plate_list,
 	license_list_t *license_result, bbox_param_t *bbox_param, global_control_param_t *G_param);
+
+
+std::vector<bbox_param_t> bbox_list_process(const std::vector<bbox_param_t> &list_lpr_bbox);
 
 #endif // _LPR_PROCESS_H_

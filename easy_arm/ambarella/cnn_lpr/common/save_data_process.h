@@ -75,13 +75,13 @@ public:
 
     void get_image(cv::Mat &src_image);
 
+    void get_image_yuv(cv::Mat &src_image);
+
     void get_tof_depth_map(cv::Mat &depth_map);
 
     void save_image(cv::Mat &src_image);
     void save_depth_map(cv::Mat &depth_map);
     void save_tof_z(const unsigned char* tof_data);
-
-    // void save_image_tensor(ea_tensor_t *img_tensor);
 
 private:
     pthread_t image_pthread_id;

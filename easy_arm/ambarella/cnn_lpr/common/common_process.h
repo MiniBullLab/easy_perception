@@ -68,10 +68,9 @@ void env_deinit(global_control_param_t *G_param);
 
 int tensor2mat_yuv2bgr_nv12(ea_tensor_t *tensor, cv::Mat &bgr);
 
-int mat2tensor_bgr2yuv_nv12(cv::Mat &bgr, ea_tensor_t *tensor);
+void swapYUV_I420toNV12(unsigned char* i420bytes, unsigned char* nv12bytes, int width, int height);
 
-int mat2tensor();
-
+int mat2tensor_yuv_nv12(cv::Mat &yuv_i420, ea_tensor_t *tensor);
 
 void fill_data(unsigned char* addr, int data);
 

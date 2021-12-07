@@ -1,4 +1,5 @@
 #include "common_process.h"
+#include <iostream>
 
 #define DEFAULT_STATE_BUF_NUM		(3)
 #define DEFAULT_STREAM_ID			(2)
@@ -41,10 +42,12 @@ int env_init(global_control_param_t *G_param)
 		G_param->img_resource = ea_img_resource_new(EA_CANVAS,
 			(void *)(unsigned long)G_param->channel_id);
 		RVAL_ASSERT(G_param->img_resource != NULL);
+#ifdef IS_SHOW
 		RVAL_OK(init_overlay_tool(G_param->stream_id,
 			G_param->overlay_x_offset, G_param->overlay_highlight_sec,
 			G_param->overlay_clear_sec, G_param->overlay_text_width_ratio,
 			DEFAULT_OVERLAY_LICENSE_NUM, G_param->debug_en));
+#endif
 		RVAL_OK(init_state_buffer_param(&G_param->ssd_result_buf,
 			G_param->state_buf_num, (uint16_t)sizeof(ea_img_resource_data_t),
 			30, (G_param->debug_en >= INFO_LEVEL)));
@@ -67,7 +70,9 @@ void env_deinit(global_control_param_t *G_param)
 	}
 	sem_destroy(&G_param->sem_readable_buf);
 	deinit_state_buffer_param(&G_param->ssd_result_buf);
+#ifdef IS_SHOW
 	deinit_overlay_tool();
+#endif
 	ea_img_resource_free(G_param->img_resource);
 	G_param->img_resource = NULL;
 	ea_env_close();
@@ -113,39 +118,47 @@ int tensor2mat_yuv2bgr_nv12(ea_tensor_t *tensor, cv::Mat &bgr)
 	return rval;
 }
 
-int mat2tensor_bgr2yuv_nv12(cv::Mat &bgr, ea_tensor_t *tensor)
+void swapYUV_I420toNV12(unsigned char* i420bytes, unsigned char* nv12bytes, int width, int height)
+{
+    int nLenY = width * height;
+    int nLenU = nLenY / 4;
+
+    memcpy(nv12bytes, i420bytes, width * height);
+
+    for (int i = 0; i < nLenU; i++)
+    {
+        nv12bytes[nLenY + 2 * i] = i420bytes[nLenY + i];                    // U
+        nv12bytes[nLenY + 2 * i + 1] = i420bytes[nLenY + nLenU + i];        // V
+    }
+}
+
+int mat2tensor_yuv_nv12(cv::Mat &yuv_i420, ea_tensor_t *tensor)
 {
 	int rval = EA_SUCCESS;
-	cv::Mat nv12;
+	int width = ea_tensor_shape(tensor)[3];
+	int height = ea_tensor_shape(tensor)[2];
+	cv::Mat nv12 = cv::Mat(width*1.5, height, CV_8UC1, cv::Scalar(0));
 	uint8_t *p_src = NULL;
 	uint8_t *p_dst = NULL;
 	size_t h;
-	#if CV_VERSION_MAJOR < 4
-		cv::cvtColor(bgr, nv12, CV_BGR2YUV_IYUV);
-	#else
-		cv::cvtColor(bgr, nv12, cv::COLOR_YUV2BGR_IYUV);
-	#endif
-	do {
-		RVAL_ASSERT(ea_tensor_shape(tensor)[1] == 1);
+	swapYUV_I420toNV12(yuv_i420.data, nv12.data, yuv_i420.cols, yuv_i420.rows * 2 / 3);
+	// std::cout << "nv12:" << yuv_i420.cols << " " << yuv_i420.rows << " " << ea_tensor_shape(tensor)[2] << std::endl;
+	p_src = nv12.data;
+	p_dst = (uint8_t *)ea_tensor_data_for_write(tensor, EA_CPU);
+	for (h = 0; h < height; h++) {
+		memcpy(p_dst, p_src, width);
+		p_src += width;
+		p_dst += ea_tensor_pitch(tensor);
+	}
 
-		p_src = nv12.data;
-		p_dst = (uint8_t *)ea_tensor_data_for_write(tensor, EA_CPU);
-		for (h = 0; h < ea_tensor_shape(tensor)[2]; h++) {
-			memcpy(p_dst, p_src, ea_tensor_shape(tensor)[3]);
-			p_src += ea_tensor_shape(tensor)[3];
-			p_dst += ea_tensor_pitch(tensor);
-		}
-
-		// if (ea_tensor_related(tensor)) {
-		// 	p_dst = (uint8_t *)ea_tensor_data_for_write(ea_tensor_related(tensor), EA_CPU);
-		// 	for (h = 0; h < ea_tensor_shape(ea_tensor_related(tensor))[2]; h++) {
-		// 		memcpy(p_dst, p_src, ea_tensor_shape(ea_tensor_related(tensor))[3]);
-		// 		p_src += ea_tensor_shape(ea_tensor_related(tensor))[3];
-		// 		p_dst += ea_tensor_pitch(ea_tensor_related(tensor));
-		// 	}
-		// }
-	} while (0);
-
+	// if (ea_tensor_related(tensor)) {
+	// 	p_dst = (uint8_t *)ea_tensor_data_for_write(ea_tensor_related(tensor), EA_CPU);
+	// 	for (h = 0; h < ea_tensor_shape(ea_tensor_related(tensor))[2]; h++) {
+	// 		memcpy(p_dst, p_src, ea_tensor_shape(ea_tensor_related(tensor))[3]);
+	// 		p_src += ea_tensor_shape(ea_tensor_related(tensor))[3];
+	// 		p_dst += ea_tensor_pitch(ea_tensor_related(tensor));
+	// 	}
+	// }
 	return rval;
 }
 

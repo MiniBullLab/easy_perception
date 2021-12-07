@@ -38,6 +38,8 @@
 #ifndef __OVERLAY_TOOL_H__
 #define __OVERLAY_TOOL_H__
 
+//#define IS_SHOW
+
 #ifndef STRING_SIZE
 #define STRING_SIZE				(256)
 #endif

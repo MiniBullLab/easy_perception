@@ -1,4 +1,5 @@
 #include "lpr_process.h"
+#include <iostream>
 
 const static std::string lpr_model_path = "/data/lpr/segfree_inception_cavalry.bin";
 const static std::vector<std::string> lpr_input_name = {"data"};
@@ -16,20 +17,35 @@ int ssd_critical_resource(
 	int i, rval = 0;
 	ea_img_resource_data_t covered_imgs_addr;
 	uint8_t buffer_covered = 0;
+	float score  = 0;
 
 	do {
 		ssd_result_num = min(MAX_DETECTED_LICENSE_NUM, ssd_result_num);
 		for (i = 0; i < ssd_result_num; i++) {
-			ssd_mid_buf->bbox_param[i].norm_max_x =
+			if(amba_ssd_result[i].score > score)
+			{
+				ssd_mid_buf->bbox_param[0].norm_max_x =
 				amba_ssd_result[i].bbox.x_max;
-			ssd_mid_buf->bbox_param[i].norm_max_y =
-				amba_ssd_result[i].bbox.y_max;
-			ssd_mid_buf->bbox_param[i].norm_min_x =
-				amba_ssd_result[i].bbox.x_min;
-			ssd_mid_buf->bbox_param[i].norm_min_y =
-				amba_ssd_result[i].bbox.y_min;
+				ssd_mid_buf->bbox_param[0].norm_max_y =
+					amba_ssd_result[i].bbox.y_max;
+				ssd_mid_buf->bbox_param[0].norm_min_x =
+					amba_ssd_result[i].bbox.x_min;
+				ssd_mid_buf->bbox_param[0].norm_min_y =
+					amba_ssd_result[i].bbox.y_min;
+				score = amba_ssd_result[i].score;
+				LOG(WARNING) << "best bbox: " << amba_ssd_result[i].bbox.x_min << " " << amba_ssd_result[i].bbox.y_min << " " \
+				 << amba_ssd_result[i].bbox.x_max << " " << amba_ssd_result[i].bbox.y_max;
+				LOG(WARNING) << "best bbox score: " << score;
+			}
 		}
-		ssd_mid_buf->object_num = ssd_result_num;
+		if(score > 0)
+		{
+			ssd_mid_buf->object_num = 1;
+		}
+		else
+		{
+			ssd_mid_buf->object_num = 0;
+		}
 		memcpy(ssd_mid_buf->img_resource_addr, imgs_data_addr,
 			G_param->ssd_result_buf.img_resource_len);
 		RVAL_OK(write_state_buffer(&G_param->ssd_result_buf, ssd_mid_buf,
@@ -134,4 +150,45 @@ void draw_overlay_preprocess(draw_plate_list_t *draw_plate_list,
 	draw_plate_list->license_num = draw_num;
 
 	return;
+}
+
+std::vector<bbox_param_t> bbox_list_process(const std::vector<bbox_param_t> &list_lpr_bbox)
+{
+	std::vector<bbox_param_t> result;
+	int input_count = 0;
+	int output_count = 0;
+	ResultRect input_bbox[30] = {0};
+	ResultRect output_bbox[30] = {0};
+	result.clear();
+	if(list_lpr_bbox.size() <= 0)
+	{
+		return result;
+	}
+	for(size_t i = list_lpr_bbox.size() - 9; i >= 0; i--)
+	{
+		input_bbox[input_count].x = (int)list_lpr_bbox[i].norm_min_x;
+		input_bbox[input_count].y = (int)list_lpr_bbox[i].norm_min_y;
+		input_bbox[input_count].width = (int)(list_lpr_bbox[i].norm_max_x - list_lpr_bbox[i].norm_min_x);
+		input_bbox[input_count].height = (int)(list_lpr_bbox[i].norm_max_y - list_lpr_bbox[i].norm_min_y);
+		input_bbox[input_count].confidence = 0;
+		input_count++;
+		if(input_count >= 30)
+		{
+			break;
+		}
+	}
+	if(input_count > 0)
+	{
+		clusteringRect(input_bbox, input_count, 0.2f, output_bbox, &output_count);
+		for(size_t i = 0; i < output_count; i++)
+		{
+			bbox_param_t bbox = {0};
+			bbox.norm_min_x = (float)output_bbox[i].x;
+			bbox.norm_min_y = (float)output_bbox[i].y;
+			bbox.norm_max_x = (float)(output_bbox[i].x + output_bbox[i].width);
+			bbox.norm_max_y = (float)(output_bbox[i].y + output_bbox[i].height);
+			result.push_back(bbox);
+		}
+	}
+	return result;
 }

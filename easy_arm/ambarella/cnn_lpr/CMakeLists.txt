@@ -26,6 +26,7 @@ file(GLOB DRIVERS_SRCS
 #collect source files
 file(GLOB LPR_SRCS
     "${PROJECT_SOURCE_DIR}/common/*.cpp"
+    "${PROJECT_SOURCE_DIR}/clustering/*.c"
     "${PROJECT_SOURCE_DIR}/image/*.cpp"
     "${PROJECT_SOURCE_DIR}/led/*.cpp"
     "${PROJECT_SOURCE_DIR}/network/*.cpp"
