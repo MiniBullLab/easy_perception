@@ -398,6 +398,6 @@ void IViBeBGS::init()
     samples_per_pixel= 20;
     min_neighbors_for_bg = 2;
     max_distance_for_bg = 50;
-    update_probability = 4;
+    update_probability = 2;
     bg_samples.clear();
 }

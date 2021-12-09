@@ -156,7 +156,7 @@ static void merge_all_result(const int in_out_result)
 	int sum_count = 0;
 	float lpr_sum = 0;
 	std::vector<bbox_param_t> result_bbox;
-	if(lpr_count > 3)
+	if(lpr_count >= 3)
 	{
 		for (size_t i = list_has_lpr.size() - 9; i >= 0; i--)
 		{
@@ -297,12 +297,6 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 #else
 					RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
 #endif
-
-#if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
-					pthread_mutex_lock(&result_mutex);
-					list_has_lpr.push_back(0);
-					pthread_mutex_unlock(&result_mutex);
-#endif 
 					continue;
 				}
 				img_tensor = data->tensor_group[DEFAULT_LPR_LAYER_ID];
@@ -340,7 +334,6 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 
 #if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
 					list_lpr_bbox.push_back(lpr_bbox);
-					list_has_lpr.push_back(1);
 #endif
 
 					LOG(WARNING) << "bbox: " << lpr_bbox.norm_min_x << " " \
@@ -358,6 +351,10 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 							LOG(WARNING) << "LPR:"  << lpr_result << " " << lpr_confidence;
 						}
 					pthread_mutex_unlock(&result_mutex);
+				}
+				else
+				{
+
 				}
 
 #if defined(OFFLINE_DATA)
@@ -475,7 +472,7 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 				if(src_image.empty())
 				{
 					LOG(ERROR) << "SSD get image fail!";
-					break;
+					continue;
 				}
 				img_tensor = ea_tensor_new(EA_U8, img_shape, ssd_param->pitch);
 				mat2tensor_yuv_nv12(src_image, img_tensor);
@@ -581,6 +578,19 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 				if(bbox_list.bbox_num > 0)
 				{
 					has_lpr = 1;
+#if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
+					pthread_mutex_lock(&result_mutex);
+					list_has_lpr.push_back(1);
+					pthread_mutex_unlock(&result_mutex);
+#endif
+				}
+				else
+				{
+#if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
+					pthread_mutex_lock(&result_mutex);
+					list_has_lpr.push_back(0);
+					pthread_mutex_unlock(&result_mutex);
+#endif 
 				}
 				LOG(WARNING) << "lpr box count:" << bbox_list.bbox_num;
 
@@ -620,7 +630,7 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 			if(src_image.empty())
 			{
 				LOG(ERROR) << "SSD get image fail!";
-				break;
+				continue;
 			}
 			has_lpr = 0;
 			TIME_MEASURE_END("[SSD] get yuv cost time", 1);
@@ -665,7 +675,7 @@ static void *run_denet_pthread(void *thread_params)
 		if(src_image.empty())
 		{
 			LOG(ERROR) << "DeNet get image fail!";
-			break;
+			continue;
 		}
 #else
 		image_geter.get_image(src_image);
@@ -714,6 +724,9 @@ static void *process_recv_pthread(void *thread_params)
 			run_denet = 0;
 			run_lpr = 0;
 			run_flag = 0;
+#if defined(OFFLINE_DATA)
+			save_process.offline_stop();
+#endif
 		}
 	}
 	LOG(WARNING) << "process_recv_pthread quit！";
@@ -926,6 +939,7 @@ static int start_all(global_control_param_t *G_param)
 		LOG(INFO) << "start tof success";
 	}
 
+#if defined(IS_DENET_RUN)
 	if(image_geter.start() < 0)
 	{
 		rval = -1;
@@ -937,6 +951,7 @@ static int start_all(global_control_param_t *G_param)
 	{
 		LOG(INFO) << "start image success";
 	}
+#endif
 #endif
 
 	do {
@@ -998,7 +1013,9 @@ static int start_all(global_control_param_t *G_param)
 	save_process.offline_stop();
 #else
 	tof_geter.stop();
+#if defined(IS_DENET_RUN)
 	image_geter.stop();
+#endif
 	save_process.stop();
 #endif
 	network_process.stop();
@@ -1209,7 +1226,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	LOG(INFO) << "net init success";
-	save_process.set_save_dir("/data/offline_data/11/image/", "/data/offline_data/11/tof/");
+	save_process.set_save_dir("/data/save_data/2021_12_08_09_26_56_1/image/", "/data/save_data/2021_12_08_09_26_56_1/tof/");
 	do {
 		RVAL_OK(init_param(&G_param));
 		RVAL_OK(env_init(&G_param));
@@ -1217,7 +1234,7 @@ int main(int argc, char **argv)
 	}while(0);
 	env_deinit(&G_param);
 #else
-	if(tof_geter.open_tof() == 0 && image_geter.open_camera() == 0)
+	if(tof_geter.open_tof() == 0 /*&& image_geter.open_camera() == 0*/)
 	{
 		if(network_process.init_network() < 0)
 		{

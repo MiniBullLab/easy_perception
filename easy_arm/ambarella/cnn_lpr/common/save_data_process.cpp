@@ -2,7 +2,9 @@
 #include "utility/utils.h"
 #include <iostream>
 #include <fstream>
+#include <algorithm> 
 
+static pthread_mutex_t stamp_mutex;
 static struct SaveImageBuffer image_buffer;
 // static struct SaveImageBuffer video_buffer;
 static struct SaveTofBuffer tof_buffer; 
@@ -12,6 +14,35 @@ static std::string save_tof_dir = "./";
 
 volatile int save_run = 0;
 volatile int video_save_run = 0;
+
+static std::vector<std::pair<long, std::string>> sort_path_list(const std::vector<std::string> &data_list, const std::string &post)
+{
+    std::pair<long, std::string> temp_data(0, "");
+    std::vector<std::pair<long, std::string> > sort_list;
+    int count = data_list.size();
+    sort_list.clear();
+    for (size_t index = 0; index < count; index++)
+    {
+        std::string::size_type iPos = data_list[index].find_last_of('/') + 1;
+	    std::string filename = data_list[index].substr(iPos, data_list[index].length() - iPos);
+        std::string name = filename.substr(0, filename.rfind("."));
+        std::string suffix_str = filename.substr(filename.find_last_of('.') + 1);
+        // std::cout << data_list[index] << " " << name << " " << suffix_str << std::endl;
+        if(suffix_str == post)
+        {
+            long stamp = std::stol(name);
+            temp_data.first = stamp;
+            temp_data.second = data_list[index];
+            sort_list.push_back(temp_data);
+        }
+    }
+
+    std::sort(sort_list.begin(), sort_list.end(),[&](std::pair<long, std::string> a, std::pair<long, std::string> b){
+        return a.first < b.first;
+    });
+
+    return sort_list;
+}
 
 // static bool saveMapBin(const std::string& filePath, const cv::Mat& map)
 // {
@@ -336,28 +367,53 @@ static void *save_tof_pthread(void* save_data)
     return NULL;
 }
 
+static long tof_stamp = 0;
 static int offline_image_count = 0;
 
 static void *offline_image_pthread(void* save_data)
 {
     unsigned long time_start, time_end;
     std::vector<std::string> data_list;
-    unsigned long long int frame_number = 0;
+    std::vector<std::pair<long, std::string>> sort_list;
+    size_t image_count = 0;
+    long pre_stamp = 0;
     ListImages(save_image_dir, data_list);
-    int image_count = data_list.size();
+    image_count = data_list.size();
     offline_image_count = image_count;
     if(image_count == 0)
     {
         LOG(ERROR) << "offline image data not exist:" << save_image_dir;
         return NULL;
     }
+
+    sort_list = sort_path_list(data_list, "jpg");
+    image_count = sort_list.size();
+
     prctl(PR_SET_NAME, "offline_image_pthread");
     for (size_t index = 0; index < image_count && save_run > 0; index++) 
     {
         time_start = get_current_time();
         cv::Mat src_img;
 		std::stringstream temp_str;
-        temp_str << save_image_dir << "image_" << index << ".jpg";
+        // temp_str << save_image_dir << "image_" << index << ".jpg";
+        if(pre_stamp == 0)
+        {
+            pre_stamp = sort_list[index].first;
+        }
+        else
+        {
+            LOG(WARNING) << "image time diff:" << sort_list[index].first - pre_stamp;
+            pre_stamp = sort_list[index].first;
+        }
+        pthread_mutex_lock(&stamp_mutex);
+        // std::cout << "dgfdhgfh:" << tof_stamp << " "  << std::abs(sort_list[index].first - tof_stamp) << std::endl;
+        if(std::abs(sort_list[index].first - tof_stamp) > 500)
+        {
+            pthread_mutex_unlock(&stamp_mutex);
+            continue;
+        }
+	    pthread_mutex_unlock(&stamp_mutex);
+        temp_str << save_image_dir << sort_list[index].second;
         LOG(WARNING) << temp_str.str();
         pthread_mutex_lock(&image_buffer.lock);  
 		if ((image_buffer.writepos + 1) % SAVE_IMAGE_BUFFER_SIZE == image_buffer.readpos)  
@@ -386,35 +442,54 @@ static void *offline_image_pthread(void* save_data)
 
 static void *offline_tof_pthread(void* save_data)
 {
+    long pre_stamp = 0;
     unsigned long time_start, time_end;
     std::vector<std::string> data_list;
-    unsigned long long int frame_number = 0;
+    std::vector<std::pair<long, std::string>> sort_list;
     ListImages(save_tof_dir, data_list);
     int sleep_time = 0;
-    int tof_count = data_list.size() / 2 + 1;
-    int base_time = 135000;
+    size_t tof_count = data_list.size() / 2 + 1;
+    int base_time = 200000;
     float count_ratio = 0;
     if(tof_count == 0)
     {
         LOG(ERROR) << "offline tof data not exist:" << save_tof_dir;
         return NULL;
     }
-    count_ratio = (float)offline_image_count / tof_count;
-    if(count_ratio < 1.1)
-    {
-        base_time = 110000;
-    }
-    else
-    {
-        base_time = 135000;
-    }
+    // count_ratio = (float)offline_image_count / tof_count;
+    // if(count_ratio < 1.1)
+    // {
+    //     base_time = 110000;
+    // }
+    // else
+    // {
+    //     base_time = 140000;
+    // }
     // base_time = (int)(count_ratio * 105000);
+
+    sort_list = sort_path_list(data_list, "bin");
+    tof_count = sort_list.size();
+
     prctl(PR_SET_NAME, "offline_tof_pthread");
     for (size_t index = 0; index < tof_count && save_run > 0; index++) 
     {
         time_start = get_current_time();
 		std::stringstream temp_str;
-        temp_str << save_tof_dir << "tof_" << index << ".bin";
+        // temp_str << save_tof_dir << "tof_" << index << ".bin";
+        if(pre_stamp == 0)
+        {
+            pre_stamp = sort_list[index].first;
+        }
+        else
+        {
+            base_time = (sort_list[index].first - pre_stamp) * 1000;
+            LOG(WARNING) << "tof time diff:" << base_time / 1000.0f;
+            pre_stamp = sort_list[index].first;
+        }
+        pthread_mutex_lock(&stamp_mutex);
+        tof_stamp = sort_list[index].first;
+	    pthread_mutex_unlock(&stamp_mutex);
+        temp_str << save_tof_dir << sort_list[index].second;
         LOG(WARNING) << temp_str.str();
         pthread_mutex_lock(&tof_buffer.lock);  
 		if ((tof_buffer.writepos + 1) % SAVE_TOF_BUFFER_SIZE == tof_buffer.readpos)  
@@ -484,6 +559,8 @@ SaveDataProcess::SaveDataProcess()
     tof_frame_number = 0;
     image_frame_number = 0;
 
+    pthread_mutex_init(&stamp_mutex, NULL);
+
     LOG(WARNING) << "tof:" << SAVE_TOF_BUFFER_SIZE << " image:" << SAVE_IMAGE_BUFFER_SIZE;
 }
 
@@ -502,6 +579,8 @@ SaveDataProcess::~SaveDataProcess()
     pthread_mutex_destroy(&tof_buffer.lock);
     pthread_cond_destroy(&tof_buffer.notempty);
     pthread_cond_destroy(&tof_buffer.notfull);
+
+    pthread_mutex_destroy(&stamp_mutex);
 
     LOG(WARNING) << "~SaveDataProcess()";
 }
