@@ -11,7 +11,7 @@
 //opencv
 #include <opencv2/core.hpp>
 
-#define TOF_BUFFER_SIZE (4)
+#define TOF_BUFFER_SIZE (5)
 #define MAX_POINT_CLOUD (240*180)
 
 #define DEPTH_WIDTH (240)
@@ -23,6 +23,7 @@ struct TOFBuffer
     // float buffer_x[TOF_BUFFER_SIZE][MAX_POINT_CLOUD];
 	// float buffer_y[TOF_BUFFER_SIZE][MAX_POINT_CLOUD];
 	float buffer_z[TOF_BUFFER_SIZE][MAX_POINT_CLOUD];
+    long buffer_stamp[TOF_BUFFER_SIZE];
     pthread_mutex_t lock; /* 互斥体lock 用于对缓冲区的互斥操作 */  
     int readpos, writepos; /* 读写指针*/  
     pthread_cond_t notempty; /* 缓冲区非空的条件变量 */  
@@ -53,6 +54,7 @@ public:
     void set_sleep();
 
     void get_tof_depth_map(cv::Mat &depth_map);
+    void get_tof_depth_map(cv::Mat &depth_map, long *stamp);
 
     void get_tof_Z(unsigned char* addr);
 
@@ -66,6 +68,7 @@ public:
 
 private:
     pthread_t pthread_id;
+    pthread_attr_t pthread_attr;
 };
 
 #endif // _TOF_ACQUISITION_H_

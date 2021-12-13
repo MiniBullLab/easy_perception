@@ -2299,15 +2299,23 @@ static int capture_yuv_data(int buffer_id, u8* buffer)
 
 static void *run_camera_pthread(void* data)
 {
-	// unsigned long time_start, time_end;
+	uint64_t start_time = 0;
 	int buffer_id = 3;
 	prctl(PR_SET_NAME, "camera_pthread");
 	while(run_camera) {
+		start_time = get_current_time();
 		pthread_mutex_lock(&image_buffer.lock);  
 		if ((image_buffer.writepos + 1) % IMAGE_BUFFER_SIZE == image_buffer.readpos)  
 		{  
+			// struct timeval now;
+    		// struct timespec outtime;
+			// gettimeofday(&now, NULL);
+			// outtime.tv_sec = now.tv_sec + 1;
+			// outtime.tv_nsec = now.tv_usec;
+			// pthread_cond_timedwait(&image_buffer.notfull, &image_buffer.lock, &outtime);
 			pthread_cond_wait(&image_buffer.notfull, &image_buffer.lock);  
 		}
+		//std::cout << "1111111111111111111" << std::endl;
 		memset(image_buffer.buffer[image_buffer.writepos], 0, IMAGE_YUV_SIZE * sizeof(u8));
 		if(capture_yuv_data(buffer_id, image_buffer.buffer[image_buffer.writepos]) < 0)
 		{
@@ -2315,12 +2323,15 @@ static void *run_camera_pthread(void* data)
 		}
 		else
 		{
+			image_buffer.buffer_stamp[image_buffer.writepos] = get_time_stamp();
 			image_buffer.writepos++;
 		}
+		//std::cout << "2222222222222222222" << std::endl;
 		if (image_buffer.writepos >= IMAGE_BUFFER_SIZE)  
 			image_buffer.writepos = 0;  
 		pthread_cond_signal(&image_buffer.notempty);  
 		pthread_mutex_unlock(&image_buffer.lock); 
+		LOG(WARNING) << "get image pthread all cost time:" <<  (get_current_time() - start_time)/1000.0  << "ms";
 	}
 	run_camera = 0;
 	LOG(WARNING) << "Camera thread quit.";
@@ -2340,6 +2351,7 @@ ImageAcquisition::~ImageAcquisition()
 	{
 		stop();
 	}
+	pthread_attr_destroy(&pthread_attr);
 	pthread_mutex_destroy(&image_buffer.lock);
     pthread_cond_destroy(&image_buffer.notempty);
     pthread_cond_destroy(&image_buffer.notfull);
@@ -2437,13 +2449,16 @@ int ImageAcquisition::open_camera()
 int ImageAcquisition::start()
 {
     int ret = 0;
+	struct sched_param param;
     run_camera = 1;
 	image_buffer.readpos = 0;  
     image_buffer.writepos = 0;
-	pthread_attr_t attr; 
-    pthread_attr_init( &attr ); 
-    pthread_attr_setdetachstate(&attr,1); 
-    ret = pthread_create(&pthread_id, &attr, run_camera_pthread, NULL);
+	pthread_attr_init(&pthread_attr);
+	param.sched_priority = 51;
+    pthread_attr_setschedpolicy(&pthread_attr, SCHED_RR);
+    pthread_attr_setschedparam(&pthread_attr, &param);
+    pthread_attr_setinheritsched(&pthread_attr, PTHREAD_EXPLICIT_SCHED);
+    ret = pthread_create(&pthread_id, &pthread_attr, run_camera_pthread, NULL);
 	if(ret < 0)
     {
         run_camera = 0;
@@ -2464,6 +2479,7 @@ int ImageAcquisition::stop()
 		pthread_join(pthread_id, NULL);
 		pthread_id = 0;
 	}
+	pthread_attr_destroy(&pthread_attr);
 	LOG(WARNING) << "stop camera success";
 	return ret;
 }
@@ -2487,6 +2503,26 @@ void ImageAcquisition::get_image(cv::Mat &src_image)
 	}
 }
 
+void ImageAcquisition::get_image(cv::Mat &src_image, long *stamp)
+{
+	if(pthread_id > 0)
+	{
+		pthread_mutex_lock(&image_buffer.lock);  
+		if (image_buffer.writepos == image_buffer.readpos)  
+		{  
+			pthread_cond_wait(&image_buffer.notempty, &image_buffer.lock);  
+		}
+		cv::Mat yuvImg(IMAGE_HEIGHT + IMAGE_HEIGHT / 2, IMAGE_WIDTH, CV_8UC1, image_buffer.buffer[image_buffer.readpos]);
+		cv::cvtColor(yuvImg, src_image, cv::COLOR_YUV2BGR_IYUV);
+		*stamp = image_buffer.buffer_stamp[image_buffer.readpos];
+		image_buffer.readpos++;  
+		if (image_buffer.readpos >= IMAGE_BUFFER_SIZE)  
+			image_buffer.readpos = 0; 
+		pthread_cond_signal(&image_buffer.notfull);  
+		pthread_mutex_unlock(&image_buffer.lock);
+	}
+}
+
 void ImageAcquisition::get_yuv(unsigned char* addr)
 {
 	if(pthread_id > 0)
@@ -2497,6 +2533,25 @@ void ImageAcquisition::get_yuv(unsigned char* addr)
 			pthread_cond_wait(&image_buffer.notempty, &image_buffer.lock);  
 		}
 		memcpy(addr, image_buffer.buffer[image_buffer.readpos], IMAGE_YUV_SIZE * sizeof(unsigned char));
+		image_buffer.readpos++;  
+		if (image_buffer.readpos >= IMAGE_BUFFER_SIZE)  
+			image_buffer.readpos = 0; 
+		pthread_cond_signal(&image_buffer.notfull);  
+		pthread_mutex_unlock(&image_buffer.lock);
+	}
+}
+
+void ImageAcquisition::get_yuv(unsigned char* addr, long *stamp)
+{
+	if(pthread_id > 0)
+	{
+		pthread_mutex_lock(&image_buffer.lock);  
+		if (image_buffer.writepos == image_buffer.readpos)  
+		{  
+			pthread_cond_wait(&image_buffer.notempty, &image_buffer.lock);  
+		}
+		memcpy(addr, image_buffer.buffer[image_buffer.readpos], IMAGE_YUV_SIZE * sizeof(unsigned char));
+		*stamp = image_buffer.buffer_stamp[image_buffer.readpos];
 		image_buffer.readpos++;  
 		if (image_buffer.readpos >= IMAGE_BUFFER_SIZE)  
 			image_buffer.readpos = 0; 

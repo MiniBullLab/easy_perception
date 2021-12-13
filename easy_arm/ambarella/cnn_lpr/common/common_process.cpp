@@ -118,7 +118,7 @@ int tensor2mat_yuv2bgr_nv12(ea_tensor_t *tensor, cv::Mat &bgr)
 	return rval;
 }
 
-void swapYUV_I420toNV12(unsigned char* i420bytes, unsigned char* nv12bytes, int width, int height)
+void swapYUV_I420toNV12(const unsigned char* i420bytes, unsigned char* nv12bytes, int width, int height)
 {
     int nLenY = width * height;
     int nLenU = nLenY / 4;
@@ -137,7 +137,7 @@ int mat2tensor_yuv_nv12(cv::Mat &yuv_i420, ea_tensor_t *tensor)
 	int rval = EA_SUCCESS;
 	int width = ea_tensor_shape(tensor)[3];
 	int height = ea_tensor_shape(tensor)[2];
-	cv::Mat nv12 = cv::Mat(width*1.5, height, CV_8UC1, cv::Scalar(0));
+	cv::Mat nv12 = cv::Mat(height, width, CV_8UC1, cv::Scalar(0));
 	uint8_t *p_src = NULL;
 	uint8_t *p_dst = NULL;
 	size_t h;
@@ -159,6 +159,29 @@ int mat2tensor_yuv_nv12(cv::Mat &yuv_i420, ea_tensor_t *tensor)
 	// 		p_dst += ea_tensor_pitch(ea_tensor_related(tensor));
 	// 	}
 	// }
+	return rval;
+}
+
+int create_yuv_nv12_tensor(const unsigned char* addr, const int width, const int height, ea_tensor_t *tensor)
+{
+	int rval = EA_SUCCESS;
+	int tensor_height = ea_tensor_shape(tensor)[2];
+	cv::Mat nv12 = cv::Mat(tensor_height, width, CV_8UC1, cv::Scalar(0));
+	uint8_t *p_src = NULL;
+	uint8_t *p_dst = NULL;
+	size_t h;
+	std::cout << "111111111111111111111" << std::endl;
+	swapYUV_I420toNV12(addr, nv12.data, width, height);
+	std::cout << "222222222222222222222" << std::endl;
+	p_src = nv12.data;
+	p_dst = (uint8_t *)ea_tensor_data_for_write(tensor, EA_CPU);
+	std::cout << "3333333333333333333333333" << std::endl;
+	for (h = 0; h < tensor_height; h++) {
+		memcpy(p_dst, p_src, width);
+		p_src += width;
+		p_dst += ea_tensor_pitch(tensor);
+	}
+	std::cout << "4444444444444444444444" << std::endl;
 	return rval;
 }
 

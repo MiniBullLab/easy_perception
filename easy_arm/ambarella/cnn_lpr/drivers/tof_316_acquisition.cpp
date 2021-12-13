@@ -37,6 +37,8 @@
 #include "rc4.h"
 #include <linux/spi/spidev.h>
 
+#include "utility/utils.h"
+
 #define PHASE_OFFSET_456	(96)
 #define PHASE_OFFSET_316	(66)
 #define FREQ_OFFSET_316 	(82)
@@ -1291,35 +1293,26 @@ static int do_tof_process(tof_mem_ptr *tof_ptr, reso *win, p2dIO *p2dio)
 // 	return 0;
 // }
 
+static reso g_win_t;
+static p2dIO g_p2dio;
+
 static void *run_tof_pthread(void* data)
 {
+	uint64_t start_time = 0;
 	struct sensor_data sensor;
 	struct timespec time0, time1, time2, time3;
-	reso win_t;
-	reso *win = &win_t;
-	tof_option_t option;
+	reso *win = &g_win_t;
 	tof_mem_ptr *tof_ptr = &tof_mem;
 	int repeat = 0;
 	unsigned long prev_pts0 = 0;
 	unsigned long prev_pts4 = 0;
-	p2dIO p2dio;
 	float *Xvalue = NULL, *Yvalue = NULL, *Zvalue = NULL;
 	int nImgsize = 0;
 
 	prctl(PR_SET_NAME, "tof_pthread");
 
-	if (tof_decode_init(tof_ptr, win, &p2dio) < 0) {
-		LOG(ERROR) << "tof_decode_init fail!";
-        run_tof = 0;
-	}
-
-	init_amba_tof_ae_config(&tof_ae_cfg, &p2dio);
-	if (config_tof(win, &option, tof_ptr) < 0){
-		LOG(ERROR) << "config_tof fail!";
-		run_tof = 0;
-	}
-
 	while(run_tof) {
+		start_time = get_current_time();
 		if (!repeat) {
 			if (debug == DEBUG_TIME) {
 				clock_gettime(CLOCK_REALTIME, &time0);
@@ -1328,7 +1321,7 @@ static void *run_tof_pthread(void* data)
 		repeat = 0;
 		memset(&sensor, 0, sizeof(sensor));
 		if (get_4_raw_data(&sensor, win, &prev_pts0, &prev_pts4,
-			&repeat, p2dio.usingDualFreq() ? 1 : 0) < 0) {
+			&repeat, g_p2dio.usingDualFreq() ? 1 : 0) < 0) {
 			LOG(ERROR) << "get_4_raw_data fail";
             run_tof = 0;
 		}
@@ -1340,7 +1333,7 @@ static void *run_tof_pthread(void* data)
 			clock_gettime(CLOCK_REALTIME, &time1);
 		}
 
-		do_tof_process(tof_ptr, win, &p2dio);
+		do_tof_process(tof_ptr, win, &g_p2dio);
 
 		nImgsize = win->width * win->height;
 		Xvalue = tof_ptr->targetData->getXvalue_ptr();
@@ -1359,6 +1352,7 @@ static void *run_tof_pthread(void* data)
 			// tof_buffer.buffer_y[tof_buffer.writepos][i] = Yvalue[i];
 			tof_buffer.buffer_z[tof_buffer.writepos][i] = Zvalue[i];
 		}
+		tof_buffer.buffer_stamp[tof_buffer.writepos] = get_time_stamp();
 		
 		tof_buffer.writepos++;  
 		if (tof_buffer.writepos >= TOF_BUFFER_SIZE)  
@@ -1374,6 +1368,7 @@ static void *run_tof_pthread(void* data)
 		{
 			sleep(1);
 		}
+		LOG(WARNING) << "get tof pthread all cost time:" <<  (get_current_time() - start_time)/1000.0  << "ms";
 	}
 	run_tof = 0;
 	sigstop();
@@ -1394,6 +1389,7 @@ TOF316Acquisition::~TOF316Acquisition()
 	{
 		stop();
 	}
+	pthread_attr_destroy(&pthread_attr);
 	pthread_mutex_destroy(&tof_buffer.lock);
     pthread_cond_destroy(&tof_buffer.notempty);
     pthread_cond_destroy(&tof_buffer.notfull);
@@ -1407,6 +1403,7 @@ TOF316Acquisition::~TOF316Acquisition()
 
 int TOF316Acquisition::open_tof()
 {
+	tof_option_t option;
     if(fd_iav >= 0)
     {
         close(fd_iav);
@@ -1422,6 +1419,18 @@ int TOF316Acquisition::open_tof()
 		LOG(ERROR) << "map_buffers error";
         return -1;
 	}
+
+	if (tof_decode_init(&tof_mem, &g_win_t, &g_p2dio) < 0) {
+		LOG(ERROR) << "tof_decode_init fail!";
+        return -1;
+	}
+
+	init_amba_tof_ae_config(&tof_ae_cfg, &g_p2dio);
+	if (config_tof(&g_win_t, &option, &tof_mem) < 0){
+		LOG(ERROR) << "config_tof fail!";
+		return -1;
+	}
+
 	pthread_mutex_init(&tof_buffer.lock, NULL);  
     pthread_cond_init(&tof_buffer.notempty, NULL);  
     pthread_cond_init(&tof_buffer.notfull, NULL);  
@@ -1434,10 +1443,16 @@ int TOF316Acquisition::open_tof()
 int TOF316Acquisition::start()
 {
 	int ret = 0;
+	struct sched_param param;
     run_tof = 1;
 	tof_buffer.readpos = 0;  
     tof_buffer.writepos = 0;
-    ret = pthread_create(&pthread_id, NULL, run_tof_pthread, NULL);
+	pthread_attr_init(&pthread_attr);
+	param.sched_priority = 51;
+    pthread_attr_setschedpolicy(&pthread_attr, SCHED_RR);
+    pthread_attr_setschedparam(&pthread_attr, &param);
+    pthread_attr_setinheritsched(&pthread_attr, PTHREAD_EXPLICIT_SCHED);
+    ret = pthread_create(&pthread_id, &pthread_attr, run_tof_pthread, NULL);
 	if(ret < 0)
     {
         run_tof = 0;
@@ -1458,6 +1473,7 @@ int TOF316Acquisition::stop()
 		pthread_join(pthread_id, NULL);
 		pthread_id = 0;
 	}
+	pthread_attr_destroy(&pthread_attr);
 	LOG(WARNING) << "stop TOF success";
 	return ret;
 }
@@ -1506,6 +1522,49 @@ void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map)
 					}
 			depth_ptr++;
 		} 
+		tof_buffer.readpos++;  
+		if (tof_buffer.readpos >= TOF_BUFFER_SIZE)  
+			tof_buffer.readpos = 0; 
+		pthread_cond_signal(&tof_buffer.notfull);  
+		pthread_mutex_unlock(&tof_buffer.lock);
+	}
+}
+
+void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map, long *stamp)
+{
+	int i, j, index;
+	float dst = 0;
+	float max_dst = 0;
+	uchar* depth_ptr = depth_map.ptr<uchar>(0);
+	if (sensor_type == SENSOR_IMX316) {
+		max_dst = MAX_DIST_316;
+	} else {
+		max_dst = MAX_DIST_456;
+	}
+	max_dst = 3.5f;
+	if(pthread_id > 0) 
+	{
+		pthread_mutex_lock(&tof_buffer.lock);  
+		if (tof_buffer.writepos == tof_buffer.readpos)  
+		{  
+			pthread_cond_wait(&tof_buffer.notempty, &tof_buffer.lock);  
+		}
+		for(int i = 0; i < MAX_POINT_CLOUD && run_tof > 0; i++)
+		{
+			if (tof_buffer.buffer_z[tof_buffer.readpos][i] > max_dst || \
+					tof_buffer.buffer_z[tof_buffer.readpos][i] < 0.3f || \
+					(tof_buffer.buffer_z[tof_buffer.readpos][i] == 0))
+					{
+						*depth_ptr = 0;
+					} 
+					else 
+					{
+						dst = tof_buffer.buffer_z[tof_buffer.readpos][i];
+						*depth_ptr = static_cast<uchar>(dst * 255 / max_dst);
+					}
+			depth_ptr++;
+		} 
+		*stamp = tof_buffer.buffer_stamp[tof_buffer.readpos];
 		tof_buffer.readpos++;  
 		if (tof_buffer.readpos >= TOF_BUFFER_SIZE)  
 			tof_buffer.readpos = 0; 

@@ -34,6 +34,7 @@
 struct ImageBuffer  
 {  	
 	unsigned char buffer[IMAGE_BUFFER_SIZE][IMAGE_YUV_SIZE];
+    long buffer_stamp[IMAGE_BUFFER_SIZE];
     pthread_mutex_t lock; /* 互斥体lock 用于对缓冲区的互斥操作 */  
     int readpos, writepos; /* 读写指针*/  
     pthread_cond_t notempty; /* 缓冲区非空的条件变量 */  
@@ -53,11 +54,14 @@ public:
     int stop();
 
     void get_image(cv::Mat &src_image);
+    void get_image(cv::Mat &src_image, long *stamp);
 
     void get_yuv(unsigned char* addr);
+    void get_yuv(unsigned char* addr, long *stamp);
 
 private:
     pthread_t pthread_id;
+    pthread_attr_t pthread_attr;
 };
 
 #endif // _IMAGE_ACQUISITION_H_

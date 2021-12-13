@@ -79,8 +79,9 @@ public:
 
     void get_tof_depth_map(cv::Mat &depth_map);
 
-    void save_image(cv::Mat &src_image);
-    void save_depth_map(cv::Mat &depth_map);
+    void save_image(const cv::Mat &src_image, const long stamp);
+    void save_image(const unsigned char *yuv_data, const long stamp);
+    void save_depth_map(const cv::Mat &depth_map, const long stamp);
     void save_tof_z(const unsigned char* tof_data);
 
 private:

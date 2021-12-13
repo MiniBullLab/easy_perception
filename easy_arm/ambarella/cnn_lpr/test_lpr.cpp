@@ -167,14 +167,17 @@ static void merge_all_result(const int in_out_result)
 				break;
 			}
 		}
-		lpr_sum = lpr_sum / sum_count;
-		if(lpr_sum > 0.5f)
+		if(sum_count > 10)
 		{
-			lpr_in_out = 1;
-		}
-		else if(lpr_sum <= 0.5f && lpr_sum > 0.1)
-		{
-			lpr_in_out = 2;
+			lpr_sum = lpr_sum / sum_count;
+			if(lpr_sum > 0.5f)
+			{
+				lpr_in_out = 1;
+			}
+			else
+			{
+				lpr_in_out = 2;
+			}
 		}
 		LOG(WARNING) << "lpr_in_out: " << lpr_in_out << " " << lpr_sum;
 	}
@@ -280,7 +283,8 @@ static void *run_lpr_pthread(void *lpr_param_thread)
 			while(run_lpr > 0)
 #endif
 			{
-				RVAL_OK(lpr_critical_resource(&license_num, bbox_param, ssd_mid_buf, G_param));
+				if(lpr_critical_resource(&license_num, bbox_param, ssd_mid_buf, G_param) < 0)
+					continue;
 				start_time = gettimeus();
 				data = (ea_img_resource_data_t *)ssd_mid_buf->img_resource_addr;
 				if (license_num == 0) {
@@ -842,10 +846,6 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 				{
 					in_out_result = 2;
 				}
-				else if(in_out_result == 2 && point_count >= 400)
-				{
-					in_out_result = 1;
-				}
 				LOG(WARNING) << "in_out_result:" << in_out_result;
 				pthread_mutex_lock(&result_mutex);
 				merge_all_result(in_out_result);
@@ -1033,18 +1033,28 @@ static int start_all(global_control_param_t *G_param)
 static void *run_tof_pthread(void *thread_params)
 {
 	uint64_t debug_time = 0;
+	long stamp = 0;
 	//unsigned char tof_data[TOF_SIZE];
 	cv::Mat depth_map = cv::Mat::zeros(cv::Size(DEPTH_WIDTH, DEPTH_HEIGTH),CV_8UC1);
+	int policy;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+        printf("SCHED_OTHER\n");
+    if(policy == SCHED_RR)
+    	printf("SCHED_RR \n");
+    if(policy == SCHED_FIFO)
+        printf("SCHED_FIFO\n");
 	prctl(PR_SET_NAME, "run_tof_pthread");
 	tof_geter.set_up();
 	while(run_flag)
 	{
-		TIME_MEASURE_START(1);
+		debug_time = get_current_time();
 		// tof_geter.get_tof_Z(tof_data);
 		// save_process.save_tof_z(depth_map);
-		tof_geter.get_tof_depth_map(depth_map);
-		save_process.save_depth_map(depth_map);
-		TIME_MEASURE_END("[run_tof_pthread] cost time", 1);
+		tof_geter.get_tof_depth_map(depth_map, &stamp);
+		save_process.save_depth_map(depth_map, stamp);
+		LOG(WARNING) << "save tof pthread all cost time:" <<  (get_current_time() - debug_time)/1000.0  << "ms";
 	}
 	// pthread_detach(pthread_self());
 	LOG(WARNING) << "run_tof_pthread quit";
@@ -1054,14 +1064,27 @@ static void *run_tof_pthread(void *thread_params)
 static void *run_image_pthread(void *thread_params)
 {
 	uint64_t debug_time = 0;
+	long stamp = 0;
+	// unsigned char yuv_data[IMAGE_YUV_SIZE] = {0};
+	int policy;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+	std::cout << "policy:" << policy << std::endl;
+    if(policy == SCHED_OTHER)
+        printf("SCHED_OTHER\n");
+    if(policy == SCHED_RR)
+    	printf("SCHED_RR\n");
+    if(policy == SCHED_FIFO)
+        printf("SCHED_FIFO\n");
 	prctl(PR_SET_NAME, "run_image_pthread");
 	while(run_flag)
 	{
-		cv::Mat src_image;
-		TIME_MEASURE_START(1);
-		image_geter.get_image(src_image);
-		save_process.save_image(src_image);
-		TIME_MEASURE_END("[run_image_pthread] cost time", 1);
+		debug_time = get_current_time();
+		cv::Mat src_image; 
+		image_geter.get_image(src_image, &stamp);
+		// image_geter.get_yuv(yuv_data, &stamp);
+		save_process.save_image(src_image, stamp);
+		LOG(WARNING) << "save image pthread all cost time:" <<  (get_current_time() - debug_time)/1000.0  << "ms";
 	}
 	LOG(WARNING) << "run_image_pthread quit";
 	return NULL;
@@ -1129,11 +1152,15 @@ int main(int argc, char **argv)
 	FLAGS_colorlogtostderr = true; 
 	FLAGS_logbufsecs = 5;    //缓存的最大时长，超时会写入文件
 	FLAGS_max_log_size = 10; //单个日志文件最大，单位M
-	FLAGS_logtostderr = false; //设置为true，就不会写日志文件了
+#if defined(ONLY_SAVE_DATA)
+	FLAGS_logtostderr = true; //设置为true，就不会写日志文件了
+#else
+	FLAGS_logtostderr = false;
+#endif
 	// FLAGS_alsologtostderr = true;
 	FLAGS_minloglevel = 0;
 	FLAGS_stop_logging_if_full_disk = true;
-
+ 
 	signal(SIGINT, sigstop);
 	signal(SIGQUIT, sigstop);
 	signal(SIGTERM, sigstop);
@@ -1226,7 +1253,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	LOG(INFO) << "net init success";
-	save_process.set_save_dir("/data/save_data/2021_12_08_09_26_56_1/image/", "/data/save_data/2021_12_08_09_26_56_1/tof/");
+	save_process.set_save_dir("/data/offline_data/2/image/", "/data/offline_data/2/tof/");
 	do {
 		RVAL_OK(init_param(&G_param));
 		RVAL_OK(env_init(&G_param));
