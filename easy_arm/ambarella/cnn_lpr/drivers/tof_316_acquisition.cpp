@@ -1444,21 +1444,28 @@ int TOF316Acquisition::start()
 {
 	int ret = 0;
 	struct sched_param param;
-    run_tof = 1;
-	tof_buffer.readpos = 0;  
-    tof_buffer.writepos = 0;
-	pthread_attr_init(&pthread_attr);
-	param.sched_priority = 51;
-    pthread_attr_setschedpolicy(&pthread_attr, SCHED_RR);
-    pthread_attr_setschedparam(&pthread_attr, &param);
-    pthread_attr_setinheritsched(&pthread_attr, PTHREAD_EXPLICIT_SCHED);
-    ret = pthread_create(&pthread_id, &pthread_attr, run_tof_pthread, NULL);
-	if(ret < 0)
-    {
-        run_tof = 0;
-        LOG(ERROR) << "start tof pthread fail!";
-    }
-	LOG(INFO) << "start tof pthread success!";
+	if(fd_iav >= 0)
+	{
+		run_tof = 1;
+		tof_buffer.readpos = 0;  
+		tof_buffer.writepos = 0;
+		pthread_attr_init(&pthread_attr);
+		param.sched_priority = 51;
+		pthread_attr_setschedpolicy(&pthread_attr, SCHED_RR);
+		pthread_attr_setschedparam(&pthread_attr, &param);
+		pthread_attr_setinheritsched(&pthread_attr, PTHREAD_EXPLICIT_SCHED);
+		ret = pthread_create(&pthread_id, &pthread_attr, run_tof_pthread, NULL);
+		if(ret < 0)
+		{
+			run_tof = 0;
+			LOG(ERROR) << "start tof pthread fail!";
+		}
+		LOG(INFO) << "start tof pthread success!";
+	}
+	else
+	{
+		LOG(ERROR) << "tof device not open!" << fd_iav;
+	}
 	return ret;
 }
 

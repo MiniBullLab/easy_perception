@@ -164,7 +164,7 @@ std::vector<bbox_param_t> bbox_list_process(const std::vector<bbox_param_t> &lis
 	{
 		return result;
 	}
-	for(size_t i = list_lpr_bbox.size() - 9; i >= 0; i--)
+	for(size_t i = list_lpr_bbox.size() - 14; i >= 0; i--)
 	{
 		input_bbox[input_count].x = (int)list_lpr_bbox[i].norm_min_x;
 		input_bbox[input_count].y = (int)list_lpr_bbox[i].norm_min_y;
@@ -179,7 +179,7 @@ std::vector<bbox_param_t> bbox_list_process(const std::vector<bbox_param_t> &lis
 	}
 	if(input_count > 0)
 	{
-		clusteringRect(input_bbox, input_count, 0.2f, output_bbox, &output_count);
+		clusteringRect(input_bbox, input_count, 0.1f, output_bbox, &output_count);
 		for(size_t i = 0; i < output_count; i++)
 		{
 			bbox_param_t bbox = {0};

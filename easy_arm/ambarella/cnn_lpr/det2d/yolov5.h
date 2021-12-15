@@ -49,7 +49,6 @@ extern "C" {
 #define YOLOV5_ANCHOR_NUM				3
 #define YOLOV5_MIN_WH					2
 #define YOLOV5_MAX_WH					4096
-#define YOLOV5_MULTI_CLASS_PER_ANCHOR	0	/*!< multi classes per anchor or the best class per anchor. 0: best class, 1: multi class */
 
 typedef struct ea_tensor_s ea_tensor_t;
 

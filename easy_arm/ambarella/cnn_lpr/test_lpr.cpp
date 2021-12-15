@@ -1,11 +1,13 @@
 
 #include <signal.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <sys/prctl.h>
 
 #include "utility/utils.h"
 
 #include "cnn_lpr/common/common_process.h"
+#include "cnn_lpr/det2d/denetv2.h"
 #include "cnn_lpr/lpr/det_process.h"
 #include "cnn_lpr/lpr/lpr_process.h"
 
@@ -36,13 +38,8 @@
 #define TIME_MEASURE_LOOPS			(20)
 
 #define IS_LPR_RUN
-//#define IS_DENET_RUN
+//#define IS_CAR_RUN
 #define IS_PC_RUN
-
-const static std::string model_path = "./denet.bin";
-const static std::vector<std::string> input_name = {"data"};
-const static std::vector<std::string> output_name = {"det_output0", "det_output1", "det_output2"};
-const char* class_name[CLASS_NUMBER] = {"car"};
 
 static std::vector<int> list_has_lpr;
 static std::vector<bbox_param_t> list_lpr_bbox;
@@ -158,7 +155,7 @@ static void merge_all_result(const int in_out_result)
 	std::vector<bbox_param_t> result_bbox;
 	if(lpr_count >= 3)
 	{
-		for (size_t i = list_has_lpr.size() - 9; i >= 0; i--)
+		for (size_t i = list_has_lpr.size() - 14; i >= 0; i--)
 		{
 			lpr_sum += list_has_lpr[i];
 			sum_count++;
@@ -659,6 +656,10 @@ static void *run_ssd_pthread(void *ssd_thread_params)
 
 static void *run_denet_pthread(void *thread_params)
 {
+	const std::string model_path = "./denet.bin";
+	const std::vector<std::string> input_name = {"data"};
+	const std::vector<std::string> output_name = {"det_output0", "det_output1", "det_output2"};
+	const char* class_name[CLASS_NUMBER] = {"car"};
 	int rval = 0;
 	uint64_t debug_time = 0;
 	std::vector<std::vector<float>> boxes;
@@ -833,7 +834,7 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 		else
 		{
 			no_process_number++;
-			if(no_process_number % 10 == 0)
+			if(no_process_number % 15 == 0)
 			{
 				int in_out_result = vote_in_out(point_cout_list);
 				int point_count = compute_depth_map(bg_map, filter_map);
@@ -939,7 +940,7 @@ static int start_all(global_control_param_t *G_param)
 		LOG(INFO) << "start tof success";
 	}
 
-#if defined(IS_DENET_RUN)
+#if defined(IS_CAR_RUN)
 	if(image_geter.start() < 0)
 	{
 		rval = -1;
@@ -981,7 +982,7 @@ static int start_all(global_control_param_t *G_param)
 		RVAL_ASSERT(rval == 0);
 #endif
 
-#if defined(IS_DENET_RUN)
+#if defined(IS_CAR_RUN)
 		rval = pthread_create(&denet_pthread_id, NULL, run_denet_pthread, NULL);
 		RVAL_ASSERT(rval == 0);
 #endif
@@ -1013,7 +1014,7 @@ static int start_all(global_control_param_t *G_param)
 	save_process.offline_stop();
 #else
 	tof_geter.stop();
-#if defined(IS_DENET_RUN)
+#if defined(IS_CAR_RUN)
 	image_geter.stop();
 #endif
 	save_process.stop();
@@ -1261,7 +1262,7 @@ int main(int argc, char **argv)
 	}while(0);
 	env_deinit(&G_param);
 #else
-	if(tof_geter.open_tof() == 0 /*&& image_geter.open_camera() == 0*/)
+	if(tof_geter.open_tof() == 0 && image_geter.open_camera() == 0)
 	{
 		if(network_process.init_network() < 0)
 		{

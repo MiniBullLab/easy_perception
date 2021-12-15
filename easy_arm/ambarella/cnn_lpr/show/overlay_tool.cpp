@@ -338,7 +338,7 @@ static void * show_overlay_thread(void* overlay_thread_param)
 			rval = pthread_cond_timedwait(&overlay_ctx.update_cond,
 				&overlay_ctx.bbox_mutex, &outtime);
 			if (rval == ETIMEDOUT) {
-				printf("%s, line %d: wait time out, quit.\n", __FUNCTION__, __LINE__);
+				printf("%s, line %d: wait time out.\n", __FUNCTION__, __LINE__);
 				// overlay_ctx.run_flag = 0;
 				// rval = -1;
 				break;

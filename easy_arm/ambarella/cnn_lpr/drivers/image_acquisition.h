@@ -16,7 +16,7 @@
 
 //#define ONLY_SAVE_DATA
 //#define ONLY_SEND_DATA
-#define OFFLINE_DATA
+//#define OFFLINE_DATA
 
 #if defined(ONLY_SAVE_DATA)
 #define IMAGE_BUFFER_SIZE (5)
@@ -25,7 +25,7 @@
 #elif defined(OFFLINE_DATA)
 #define IMAGE_BUFFER_SIZE (1)
 #else
-#define IMAGE_BUFFER_SIZE (2)
+#define IMAGE_BUFFER_SIZE (3)
 #endif
 #define IMAGE_WIDTH (1920)
 #define IMAGE_HEIGHT (1080)

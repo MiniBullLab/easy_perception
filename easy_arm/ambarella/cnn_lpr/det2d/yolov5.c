@@ -141,7 +141,7 @@ int yolov5_init(yolov5_t *yolov5, const yolov5_params_t *params)
 
 	if (rval < 0) {
 		if (fp_label) {
-			free(fp_label);
+			fclose(fp_label);
 			fp_label = NULL;
 		}
 
@@ -205,11 +205,8 @@ int yolov5_arm_post_process(yolov5_t *yolov5, yolov5_result_t *result)
 	float **nms_x1y1x2y2score_in_class = NULL;
 	int *nms_valid_count_in_class = NULL;
 	int i, m, a, c, h, w;
-#if YOLOV5_MULTI_CLASS_PER_ANCHOR
-#else
 	int best_cls;
 	float best_cls_conf;
-#endif
 
 	do {
 		for (m = 0; m < YOLOV5_FEATURE_MAP_NUM; m++) {
@@ -412,8 +409,8 @@ int yolov5_arm_post_process(yolov5_t *yolov5, yolov5_result_t *result)
 					result->detections[result->valid_det_count].y_end =
 						min(1.0, result->detections[result->valid_det_count].y_end);
 
-					strncpy(result->detections[result->valid_det_count].label, yolov5->labels[result->detections[result->valid_det_count].id],
-						sizeof(result->detections[result->valid_det_count].label));
+					snprintf(result->detections[result->valid_det_count].label, sizeof(result->detections[result->valid_det_count].label),
+						"%s", yolov5->labels[result->detections[result->valid_det_count].id]);
 					EA_LOG_DEBUG("%f %f %f %f %f\n",
 						nms_x1y1x2y2score_in_class[c][i * 5 + 0], nms_x1y1x2y2score_in_class[c][i * 5 + 1],
 						nms_x1y1x2y2score_in_class[c][i * 5 + 2], nms_x1y1x2y2score_in_class[c][i * 5 + 3],
