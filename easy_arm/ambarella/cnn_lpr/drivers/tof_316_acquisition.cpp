@@ -1312,7 +1312,7 @@ static void *run_tof_pthread(void* data)
 	prctl(PR_SET_NAME, "tof_pthread");
 
 	while(run_tof) {
-		start_time = get_current_time();
+		start_time = gettimeus();
 		if (!repeat) {
 			if (debug == DEBUG_TIME) {
 				clock_gettime(CLOCK_REALTIME, &time0);
@@ -1368,7 +1368,7 @@ static void *run_tof_pthread(void* data)
 		{
 			sleep(1);
 		}
-		LOG(WARNING) << "get tof pthread all cost time:" <<  (get_current_time() - start_time)/1000.0  << "ms";
+		LOG(WARNING) << "get tof pthread all cost time:" <<  (gettimeus() - start_time)/1000.0  << "ms";
 	}
 	run_tof = 0;
 	sigstop();

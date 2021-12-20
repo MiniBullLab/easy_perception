@@ -35,6 +35,8 @@ public:
 
     int send_result(const std::string &lpr_result, const int code);
 
+    int send_error(const int code);
+
     int send_log_path();
 
     int send_save_data();

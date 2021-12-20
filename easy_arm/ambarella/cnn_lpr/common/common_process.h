@@ -25,7 +25,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "cnn_lpr/lpr/utils.hpp"
-#include "cnn_lpr/lpr/ssd_lpr_common.h"
+//#include "cnn_lpr/lpr/ssd_lpr_common.h"
 #include "cnn_lpr/lpr/state_buffer.h"
 #include "cnn_lpr/show/overlay_tool.h"
 

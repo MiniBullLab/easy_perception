@@ -8,7 +8,6 @@
 #define IS_USE_STAMP
 
 static sem_t sem_put, sem_get;
-static pthread_mutex_t stamp_mutex;
 static struct SaveImageBuffer image_buffer;
 // static struct SaveImageBuffer video_buffer;
 static struct SaveTofBuffer tof_buffer; 
@@ -308,6 +307,7 @@ static std::vector<std::pair<long, std::string>> sort_path_list(const std::vecto
 static void *save_image_pthread(void* save_data)
 {
     unsigned long long int frame_number = 0;
+    long stamp = 0;
     prctl(PR_SET_NAME, "save_image_pthread");
     while(save_run) {
         pthread_mutex_lock(&image_buffer.lock);  
@@ -316,18 +316,19 @@ static void *save_image_pthread(void* save_data)
             pthread_cond_wait(&image_buffer.notempty, &image_buffer.lock);  
         }
         cv::Mat src_image = image_buffer.buffer[image_buffer.readpos];
+        stamp = image_buffer.buffer_stamp[image_buffer.readpos];
         std::stringstream filename_image;
-        filename_image << save_image_dir << get_time_stamp() << ".jpg";
+        filename_image << save_image_dir << stamp << ".jpg";
         if(!src_image.empty())
         {
             cv::imwrite(filename_image.str(), src_image);
-            frame_number++;
+            //frame_number++;
         }
         else
         {
             LOG(ERROR) << "save src image empty: " << filename_image.str();
         }
-        image_buffer.readpos++;  
+        image_buffer.readpos++;
         if (image_buffer.readpos >= SAVE_IMAGE_BUFFER_SIZE)  
             image_buffer.readpos = 0; 
         pthread_cond_signal(&image_buffer.notfull);  
@@ -341,6 +342,7 @@ static void *save_image_pthread(void* save_data)
 static void *save_tof_pthread(void* save_data)
 {
     unsigned long long int frame_number = 0;
+    long stamp = 0;
     prctl(PR_SET_NAME, "save_tof_pthread");
     while(save_run) {
 		pthread_mutex_lock(&tof_buffer.lock);  
@@ -349,12 +351,16 @@ static void *save_tof_pthread(void* save_data)
             pthread_cond_wait(&tof_buffer.notempty, &tof_buffer.lock);  
         }
         cv::Mat depth_map = tof_buffer.buffer[tof_buffer.readpos];
+        stamp = tof_buffer.buffer_stamp[image_buffer.readpos];
         std::stringstream filename_tof;
-        filename_tof << save_tof_dir << get_time_stamp() << ".jpg";
+        filename_tof << save_tof_dir << stamp << ".bin";
         if(!depth_map.empty())
         {
-            cv::imwrite(filename_tof.str(), depth_map);
-            frame_number++;
+            std::ofstream outF(filename_tof.str(), std::ios::binary);
+            outF.write(reinterpret_cast<char*>(depth_map.data), DEPTH_WIDTH * DEPTH_HEIGTH * sizeof(uchar));
+            outF.close();
+            // cv::imwrite(filename_tof.str(), depth_map);
+            // frame_number++;
         }
         else
         {
@@ -400,7 +406,7 @@ static void *offline_image_pthread(void* save_data)
     prctl(PR_SET_NAME, "offline_image_pthread");
     for (size_t index = 0; index < image_count && save_run > 0; index++) 
     {
-        time_start = get_current_time();
+        time_start = gettimeus();
         cv::Mat src_img;
 		std::stringstream temp_str;
 #if defined(IS_USE_STAMP)
@@ -447,13 +453,13 @@ static void *offline_image_pthread(void* save_data)
 			image_buffer.writepos = 0;  
 		pthread_cond_signal(&image_buffer.notempty);  
 		pthread_mutex_unlock(&image_buffer.lock); 
-        time_end = get_current_time();
+        time_end = gettimeus();
         sleep_time = (base_time * 1000) - (time_end - time_start);
         LOG(INFO) << "offline get image cost time: " <<  (time_end - time_start)/1000.0  << "ms  sleep:" << sleep_time;
         if(sleep_time <= 0)
             sleep_time = 0;
         usleep(sleep_time);
-        LOG(WARNING) << "offline image all cost time: " <<  (get_current_time() - time_start)/1000.0  << "ms";
+        LOG(WARNING) << "offline image all cost time: " <<  (gettimeus() - time_start)/1000.0  << "ms";
     }
 	LOG(WARNING) << "offline image thread quit.";
     return NULL;
@@ -494,7 +500,7 @@ static void *offline_tof_pthread(void* save_data)
     prctl(PR_SET_NAME, "offline_tof_pthread");
     for (size_t index = 0; index < tof_count && save_run > 0; index++) 
     {
-        time_start = get_current_time();
+        time_start = gettimeus();
 		std::stringstream temp_str;
 #if defined(IS_USE_STAMP)
         if(pre_stamp == 0)
@@ -552,14 +558,14 @@ static void *offline_tof_pthread(void* save_data)
 			tof_buffer.writepos = 0;  
 		pthread_cond_signal(&tof_buffer.notempty);  
 		pthread_mutex_unlock(&tof_buffer.lock); 
-        time_end = get_current_time();
+        time_end = gettimeus();
         if(base_time > 0)
             sleep_time = (base_time * 1000) - (time_end - time_start);
         LOG(INFO) << "offline get tof cost time: " <<  (time_end - time_start)/1000.0  << "ms sleep:" << sleep_time;
         if(sleep_time <= 0)
             sleep_time = 160;
         usleep(sleep_time);
-        LOG(WARNING) << "offline tof all cost time: " <<  (get_current_time() - time_start)/1000.0  << "ms";
+        LOG(WARNING) << "offline tof all cost time: " <<  (gettimeus() - time_start)/1000.0  << "ms";
     }
 	LOG(WARNING) << "offline tof thread quit.";
     return NULL;
@@ -594,7 +600,6 @@ SaveDataProcess::SaveDataProcess()
     tof_frame_number = 0;
     image_frame_number = 0;
 
-    pthread_mutex_init(&stamp_mutex, NULL);
     // sem_init(&sem_put, 0, 1);
 	// sem_init(&sem_get, 0, 0);
 
@@ -617,7 +622,6 @@ SaveDataProcess::~SaveDataProcess()
     pthread_cond_destroy(&tof_buffer.notempty);
     pthread_cond_destroy(&tof_buffer.notfull);
 
-    pthread_mutex_destroy(&stamp_mutex);
     // sem_destroy(&sem_put);
 	// sem_destroy(&sem_get);
 
@@ -826,7 +830,7 @@ int SaveDataProcess::offline_stop()
 	return ret;
 }
 
-void SaveDataProcess::put_image_data(cv::Mat &src_image)
+void SaveDataProcess::put_image_data(cv::Mat &src_image, const long stamp)
 {
     if (image_pthread_id > 0 &&  save_run > 0) 
     {
@@ -837,9 +841,8 @@ void SaveDataProcess::put_image_data(cv::Mat &src_image)
             {  
                 pthread_cond_wait(&image_buffer.notfull, &image_buffer.lock);  
             }
-            
             image_buffer.buffer[image_buffer.writepos] = src_image.clone();
-            
+            image_buffer.buffer_stamp[tof_buffer.writepos] = stamp;
             image_buffer.writepos++;  
             if (image_buffer.writepos >= SAVE_IMAGE_BUFFER_SIZE)  
                 image_buffer.writepos = 0;  
@@ -853,7 +856,7 @@ void SaveDataProcess::put_image_data(cv::Mat &src_image)
     } 
 }
 
-void SaveDataProcess::put_tof_data(cv::Mat &depth_map)
+void SaveDataProcess::put_tof_data(cv::Mat &depth_map, const long stamp)
 {
     if(tof_pthread_id > 0 &&  save_run > 0)
     {
@@ -865,6 +868,7 @@ void SaveDataProcess::put_tof_data(cv::Mat &depth_map)
                 pthread_cond_wait(&tof_buffer.notfull, &tof_buffer.lock);  
             }
             tof_buffer.buffer[tof_buffer.writepos] = depth_map.clone();
+            tof_buffer.buffer_stamp[tof_buffer.writepos] = stamp;
             tof_buffer.writepos++;  
             if (tof_buffer.writepos >= SAVE_TOF_BUFFER_SIZE)  
                 tof_buffer.writepos = 0;  
@@ -940,7 +944,7 @@ void SaveDataProcess::save_image(const cv::Mat &src_image, const long stamp)
 {
     unsigned long time_start;
     std::stringstream filename_image;
-    time_start = get_current_time();
+    time_start = gettimeus();
     filename_image << save_image_dir << stamp << ".jpg";
     if(!src_image.empty())
     {
@@ -954,14 +958,14 @@ void SaveDataProcess::save_image(const cv::Mat &src_image, const long stamp)
     {
         LOG(ERROR) << "save src image empty: " << filename_image.str();
     }
-    LOG(WARNING) << "save image cost time: " <<  (get_current_time() - time_start)/1000.0  << "ms";
+    LOG(WARNING) << "save image cost time: " <<  (gettimeus() - time_start)/1000.0  << "ms";
 }
 
 void SaveDataProcess::save_image(const unsigned char *yuv_data, const long stamp)
 {
     unsigned long time_start;
     std::stringstream filename_image;
-    time_start = get_current_time();
+    time_start = gettimeus();
     filename_image << save_image_dir << stamp << ".yuv";
     if(yuv_data != NULL)
     {
@@ -974,7 +978,7 @@ void SaveDataProcess::save_image(const unsigned char *yuv_data, const long stamp
     {
         LOG(ERROR) << "save src image empty: " << filename_image.str();
     }
-    LOG(WARNING) << "save image cost time: " <<  (get_current_time() - time_start)/1000.0  << "ms";
+    LOG(WARNING) << "save image cost time: " <<  (gettimeus() - time_start)/1000.0  << "ms";
 }
 
 void SaveDataProcess::save_depth_map(const cv::Mat &depth_map, const long stamp)
@@ -992,11 +996,30 @@ void SaveDataProcess::save_depth_map(const cv::Mat &depth_map, const long stamp)
         outF.write(reinterpret_cast<char*>(depth_map.data), DEPTH_WIDTH * DEPTH_HEIGTH * sizeof(uchar));
         outF.close();
         cv::imwrite(temp_tof.str(), depth_map, compression_params);
-        tof_frame_number++;
+        // tof_frame_number++;
     }
     else
     {
         LOG(ERROR) << "save depth map empty: " << filename_tof.str();
+    }
+}
+
+void SaveDataProcess::save_depth_map(const cv::Mat &depth_map, const std::string &save_path)
+{
+    if(!depth_map.empty())
+    {
+        std::vector<int> compression_params;
+	    compression_params.push_back(cv::IMWRITE_JPEG_QUALITY);
+	    compression_params.push_back(90);
+        // std::ofstream outF(save_path, std::ios::binary);
+        // outF.write(reinterpret_cast<char*>(depth_map.data), DEPTH_WIDTH * DEPTH_HEIGTH * sizeof(uchar));
+        // outF.close();
+        cv::imwrite(save_path, depth_map, compression_params);
+        // tof_frame_number++;
+    }
+    else
+    {
+        LOG(ERROR) << "save depth map empty: " << save_path;
     }
 }
 
@@ -1007,5 +1030,5 @@ void SaveDataProcess::save_tof_z(const unsigned char* tof_data)
     std::ofstream outF(filename_tof.str(), std::ios::binary);
     outF.write(reinterpret_cast<const char*>(tof_data), TOF_SIZE * sizeof(unsigned char));
     outF.close();
-    tof_frame_number++;
+    // tof_frame_number++;
 }

@@ -2303,7 +2303,7 @@ static void *run_camera_pthread(void* data)
 	int buffer_id = 3;
 	prctl(PR_SET_NAME, "camera_pthread");
 	while(run_camera) {
-		start_time = get_current_time();
+		start_time = gettimeus();
 		pthread_mutex_lock(&image_buffer.lock);  
 		if ((image_buffer.writepos + 1) % IMAGE_BUFFER_SIZE == image_buffer.readpos)  
 		{  
@@ -2315,8 +2315,9 @@ static void *run_camera_pthread(void* data)
 			// pthread_cond_timedwait(&image_buffer.notfull, &image_buffer.lock, &outtime);
 			pthread_cond_wait(&image_buffer.notfull, &image_buffer.lock);  
 		}
-		//std::cout << "1111111111111111111" << std::endl;
+		// std::cout << "1111111111111111111" << std::endl;
 		memset(image_buffer.buffer[image_buffer.writepos], 0, IMAGE_YUV_SIZE * sizeof(u8));
+		start_time = gettimeus();
 		if(capture_yuv_data(buffer_id, image_buffer.buffer[image_buffer.writepos]) < 0)
 		{
 			LOG(ERROR) << "capture yuv data fail!";
@@ -2326,12 +2327,12 @@ static void *run_camera_pthread(void* data)
 			image_buffer.buffer_stamp[image_buffer.writepos] = get_time_stamp();
 			image_buffer.writepos++;
 		}
-		//std::cout << "2222222222222222222" << std::endl;
+		LOG(WARNING) << "get yuv cost time:" <<  (gettimeus() - start_time)/1000.0  << "ms";
 		if (image_buffer.writepos >= IMAGE_BUFFER_SIZE)  
 			image_buffer.writepos = 0;  
 		pthread_cond_signal(&image_buffer.notempty);  
 		pthread_mutex_unlock(&image_buffer.lock); 
-		LOG(WARNING) << "get image pthread all cost time:" <<  (get_current_time() - start_time)/1000.0  << "ms";
+		LOG(WARNING) << "get image pthread all cost time:" <<  (gettimeus() - start_time)/1000.0  << "ms";
 	}
 	run_camera = 0;
 	LOG(WARNING) << "Camera thread quit.";

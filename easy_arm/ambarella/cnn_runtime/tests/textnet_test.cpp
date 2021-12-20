@@ -29,10 +29,10 @@ static void image_dir_infer(const std::string &image_dir){
         temp_str << image_dir << images[index];
 		std::cout << temp_str.str() << std::endl;
 		src_img = cv::imread(temp_str.str());
-        time_start = get_current_time();
+        time_start = gettimeus();
         result = textnet_process.run(src_img);
         std::cout << result << std::endl;
-        time_end = get_current_time();
+        time_end = gettimeus();
         std::cout << "textnet cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
         save_result << images[index] << "|" << result << "\n";
     }
@@ -69,9 +69,9 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
         image_path << image_dir << image_name;
         std::cout << image_path.str() << std::endl;
         src_img = cv::imread(image_path.str());
-        time_start = get_current_time();
+        time_start = gettimeus();
         result = textnet_process.run(src_img);
-        time_end = get_current_time();
+        time_end = gettimeus();
         std::cout << "textnet cost time: " <<  (time_end - time_start) / 1000.0  << "ms" << std::endl;
 
         save_result << image_name << "|" << result << "\n";

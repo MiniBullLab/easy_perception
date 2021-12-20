@@ -19,4 +19,6 @@ int compute_depth_map(const cv::Mat &bg_map, const cv::Mat &depth_map);
 int vote_in_out(const std::vector<int> &point_cout_list);
 int get_in_out(const std::vector<int> &result_list);
 
+int has_motion_target(const cv::Mat &fg_output);
+
 #endif // _TOF_DATA_PROCESS_H_

@@ -50,7 +50,6 @@ target_sources(test_lpr
         )
 
 target_link_libraries(test_lpr
-                      cnn_runtime
                       opencv_core
                       opencv_imgcodecs
                       opencv_imgproc
@@ -81,5 +80,6 @@ target_link_libraries(test_lpr
                       cvlib
                       dl
                       rt
-                      pthread)
+                      pthread
+                      ncnn)
 

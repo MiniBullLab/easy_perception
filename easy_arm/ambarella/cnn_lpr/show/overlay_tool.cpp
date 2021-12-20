@@ -47,7 +47,7 @@
 #include <unistd.h>
 #include <eazyai.h>
 #include <sys/prctl.h>
-#include "cnn_lpr/lpr/ssd_lpr_common.h"
+#include "cnn_lpr/lpr/utils.hpp"
 #include "overlay_tool.h"
 
 EA_LOG_DECLARE_LOCAL(EA_LOG_LEVEL_NOTICE);
@@ -450,6 +450,7 @@ int init_overlay_tool(int stream_id, float x_offset,
 	size_t license_img_shape[4];
 
 	do {
+		memset(&overlay_ctx, 0, sizeof(overlay_ctx_t));
 		overlay_ctx.x_offset = x_offset;
 		overlay_ctx.highlight_sec = highlight_sec;
 		overlay_ctx.clear_sec = clear_sec;

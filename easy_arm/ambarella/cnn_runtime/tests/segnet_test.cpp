@@ -31,9 +31,9 @@ static void image_dir_infer(const std::string &image_dir){
         std::string image_name = images[index].substr(0, str_index);
 		std::cout << temp_str.str() << std::endl;
 		src_image = cv::imread(temp_str.str());
-        time_start = get_current_time();
+        time_start = gettimeus();
         seg_process.run(src_image);
-        time_end = get_current_time();
+        time_end = gettimeus();
         std::cout << "seg cost time: " <<  (time_end - time_start) / 1000.0  << "ms" << std::endl;
 
         save_path << save_result_dir << image_name << ".png";
@@ -75,9 +75,9 @@ void image_txt_infer(const std::string &image_dir, const std::string &image_txt_
         image_path << image_dir << image_name_post;
         std::cout << image_path.str() << std::endl;
         src_image = cv::imread(image_path.str());
-        time_start = get_current_time();
+        time_start = gettimeus();
         seg_process.run(src_image);
-        time_end = get_current_time();
+        time_end = gettimeus();
         std::cout << "seg cost time: " <<  (time_end - time_start) / 1000.0  << "ms" << std::endl;
 
         save_path << save_result_dir << image_name << ".png";

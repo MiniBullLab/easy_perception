@@ -3,11 +3,11 @@
 
 #include "cnn_lpr/common/common_process.h"
 #include "cnn_lpr/lpr/lpr.hpp"
-#include "cnn_lpr/lpr/det_process.h"
+#include "cnn_lpr/lpr/det_lpr_process.h"
 
 #include "cnn_lpr/clustering/clustering_rect.h"
 
-#define DEFAULT_LPR_CONF_THRES		(0.9f)
+#define DEFAULT_LPR_CONF_THRES		(0.5f)
 #define CHINESE_LICENSE_STR_LEN		(9)
 #define DRAW_LICNESE_UPSCALE_H		(1.0f)
 #define DRAW_LICNESE_UPSCALE_W		(0.2f)
@@ -15,6 +15,11 @@
 int ssd_critical_resource(
 	dproc_ssd_detection_output_result_t *amba_ssd_result,
 	ea_img_resource_data_t* imgs_data_addr, int ssd_result_num,
+	state_buffer_t *ssd_mid_buf, global_control_param_t *G_param);
+
+int yolov5_critical_resource(
+	landmark_yolov5_det_t *yolov5_result,
+	ea_img_resource_data_t* imgs_data_addr, int result_num,
 	state_buffer_t *ssd_mid_buf, global_control_param_t *G_param);
 
 int lpr_critical_resource(uint16_t *license_num, bbox_param_t *bbox_param,

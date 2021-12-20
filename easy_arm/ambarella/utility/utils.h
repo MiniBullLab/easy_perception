@@ -1,5 +1,5 @@
-#ifndef UTILS_H
-#define UTILS_H
+#ifndef MY_UTILS_H
+#define MY_UTILS_H
 
 #include <iostream>
 #include <fstream>
@@ -16,7 +16,7 @@
 #include <future>
 
 
-unsigned long get_current_time(void);
+unsigned long gettimeus(void);
 
 long get_time_stamp(void);
 
@@ -24,4 +24,4 @@ void ListPath(std::string const &path, std::vector<std::string> &paths);
 
 void ListImages(std::string const &path, std::vector<std::string> &images);
 
-#endif //__UTILS_H__
+#endif //MY_UTILS_H

@@ -1,10 +1,12 @@
 #include "utils.h"
 
-unsigned long get_current_time(void)
+unsigned long gettimeus(void)
 {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (tv.tv_sec*1000000 + tv.tv_usec);
+	static struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+
+	return (unsigned long) 1000000 * (unsigned long) (tv.tv_sec) + (unsigned long) (tv.tv_usec);
 }
 
 long get_time_stamp(void)

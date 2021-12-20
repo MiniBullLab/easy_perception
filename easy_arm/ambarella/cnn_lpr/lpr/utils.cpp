@@ -209,7 +209,7 @@ void save_mat_to_file(cv::Mat img, std::string fn, int idx)
 	return;
 }
 
-unsigned long gettimeus(void)
+unsigned long gettimeus_v2(void)
 {
 	static struct timeval tv;
 

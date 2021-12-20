@@ -120,6 +120,13 @@ typedef struct ssd_net_final_result_s {
 	int ssd_det_num;
 } ssd_net_final_result_t;
 
+typedef struct SSD_ctx_s {
+	ea_net_t *net;
+	ssd_net_ctx_t ssd_net_ctx;
+	ssd_net_input_t net_input;
+	ssd_net_vp_result_info_t vp_result_info;
+} SSD_ctx_t;
+
 int ssd_net_init(IN const ssd_net_params_t *params, IN ssd_net_ctx_t *ssd_net_ctx,
 	OUT ssd_net_input_t *input, OUT ssd_net_vp_result_info_t *vp_result_info);
 

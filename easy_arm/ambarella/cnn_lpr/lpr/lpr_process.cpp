@@ -32,9 +32,87 @@ int ssd_critical_resource(
 					amba_ssd_result[i].bbox.x_min;
 				ssd_mid_buf->bbox_param[0].norm_min_y =
 					amba_ssd_result[i].bbox.y_min;
+				ssd_mid_buf->bbox_param[0].p1_x = 0;
+				ssd_mid_buf->bbox_param[0].p1_y = 0;
+				ssd_mid_buf->bbox_param[0].p2_x = 0;
+				ssd_mid_buf->bbox_param[0].p2_y = 0;
+				ssd_mid_buf->bbox_param[0].p3_x = 0;
+				ssd_mid_buf->bbox_param[0].p3_y = 0;
+				ssd_mid_buf->bbox_param[0].p4_x = 0;
+				ssd_mid_buf->bbox_param[0].p4_y = 0;
 				score = amba_ssd_result[i].score;
 				LOG(WARNING) << "best bbox: " << amba_ssd_result[i].bbox.x_min << " " << amba_ssd_result[i].bbox.y_min << " " \
 				 << amba_ssd_result[i].bbox.x_max << " " << amba_ssd_result[i].bbox.y_max;
+				LOG(WARNING) << "best bbox score: " << score;
+			}
+		}
+		if(score > 0)
+		{
+			ssd_mid_buf->object_num = 1;
+		}
+		else
+		{
+			ssd_mid_buf->object_num = 0;
+		}
+		memcpy(ssd_mid_buf->img_resource_addr, imgs_data_addr,
+			G_param->ssd_result_buf.img_resource_len);
+		RVAL_OK(write_state_buffer(&G_param->ssd_result_buf, ssd_mid_buf,
+			&G_param->access_buffer_mutex, &G_param->sem_readable_buf,
+			(void*)&covered_imgs_addr, &buffer_covered));
+		if (buffer_covered) {
+			RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, &covered_imgs_addr));
+		}
+	} while (0);
+
+	return rval;
+}
+
+int yolov5_critical_resource(
+	landmark_yolov5_det_t *yolov5_result,
+	ea_img_resource_data_t* imgs_data_addr, int result_num,
+	state_buffer_t *ssd_mid_buf, global_control_param_t *G_param)
+{
+	int i, rval = 0;
+	ea_img_resource_data_t covered_imgs_addr;
+	uint8_t buffer_covered = 0;
+	float score  = 0;
+
+	do {
+		result_num = min(MAX_DETECTED_LICENSE_NUM, result_num);
+		for (i = 0; i < result_num; i++) {
+			if(yolov5_result[i].score > score)
+			{
+				ssd_mid_buf->bbox_param[0].norm_max_x = yolov5_result[i].x_end;
+				ssd_mid_buf->bbox_param[0].norm_max_y = yolov5_result[i].y_end;
+				ssd_mid_buf->bbox_param[0].norm_min_x = yolov5_result[i].x_start;
+				ssd_mid_buf->bbox_param[0].norm_min_y = yolov5_result[i].y_start;
+				if(yolov5_result[i].p1_x > yolov5_result[i].p2_x && \
+						yolov5_result[i].p4_x > yolov5_result[i].p3_x)
+				{
+					ssd_mid_buf->bbox_param[0].p1_x = yolov5_result[i].p1_x;
+					ssd_mid_buf->bbox_param[0].p1_y = yolov5_result[i].p1_y;
+					ssd_mid_buf->bbox_param[0].p2_x = yolov5_result[i].p2_x;
+					ssd_mid_buf->bbox_param[0].p2_y = yolov5_result[i].p2_y;
+					ssd_mid_buf->bbox_param[0].p3_x = yolov5_result[i].p3_x;
+					ssd_mid_buf->bbox_param[0].p3_y = yolov5_result[i].p3_y;
+					ssd_mid_buf->bbox_param[0].p4_x = yolov5_result[i].p4_x;
+					ssd_mid_buf->bbox_param[0].p4_y = yolov5_result[i].p4_y;
+				}
+				else
+				{
+					ssd_mid_buf->bbox_param[0].p1_x = yolov5_result[i].p2_x;
+					ssd_mid_buf->bbox_param[0].p1_y = yolov5_result[i].p2_y;
+					ssd_mid_buf->bbox_param[0].p2_x = yolov5_result[i].p1_x;
+					ssd_mid_buf->bbox_param[0].p2_y = yolov5_result[i].p1_y;
+					ssd_mid_buf->bbox_param[0].p3_x = yolov5_result[i].p4_x;
+					ssd_mid_buf->bbox_param[0].p3_y = yolov5_result[i].p4_y;
+					ssd_mid_buf->bbox_param[0].p4_x = yolov5_result[i].p3_x;
+					ssd_mid_buf->bbox_param[0].p4_y = yolov5_result[i].p3_y;
+				}
+
+				score = yolov5_result[i].score;
+				LOG(WARNING) << "best bbox: " << yolov5_result[i].x_start << " " << yolov5_result[i].y_start << " " \
+				 << yolov5_result[i].x_end << " " << yolov5_result[i].y_end;
 				LOG(WARNING) << "best bbox score: " << score;
 			}
 		}
@@ -78,6 +156,14 @@ int lpr_critical_resource(uint16_t *license_num, bbox_param_t *bbox_param,
 			bbox_param[i].norm_min_y = ssd_mid_buf->bbox_param[i].norm_min_y;
 			bbox_param[i].norm_max_x = ssd_mid_buf->bbox_param[i].norm_max_x;
 			bbox_param[i].norm_max_y = ssd_mid_buf->bbox_param[i].norm_max_y;
+			bbox_param[i].p1_x = ssd_mid_buf->bbox_param[i].p1_x;
+			bbox_param[i].p1_y = ssd_mid_buf->bbox_param[i].p1_y;
+			bbox_param[i].p2_x = ssd_mid_buf->bbox_param[i].p2_x;
+			bbox_param[i].p2_y = ssd_mid_buf->bbox_param[i].p2_y;
+			bbox_param[i].p3_x = ssd_mid_buf->bbox_param[i].p3_x;
+			bbox_param[i].p3_y = ssd_mid_buf->bbox_param[i].p3_y;
+			bbox_param[i].p4_x = ssd_mid_buf->bbox_param[i].p4_x;
+			bbox_param[i].p4_y = ssd_mid_buf->bbox_param[i].p4_y;
 		}
 		if (G_param->debug_en >= INFO_LEVEL) {
 			LOG(INFO) << "------------------------------";

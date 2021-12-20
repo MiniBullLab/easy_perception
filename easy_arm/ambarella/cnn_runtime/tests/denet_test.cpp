@@ -42,9 +42,9 @@ static void image_dir_infer(const std::string &image_dir){
             continue;
         }
         src_image = cv::imread(temp_str.str());
-        time_start = get_current_time();
+        time_start = gettimeus();
         boxes = denet_process.run(src_image);
-        time_end = get_current_time();
+        time_end = gettimeus();
         std::cout << "det2d cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
 
         for (size_t i = 0; i < boxes.size(); ++i)
@@ -100,9 +100,9 @@ static void image_txt_infer(const std::string &image_dir, const std::string &ima
             continue;
         }
         src_image = cv::imread(image_path.str());
-        time_start = get_current_time();
+        time_start = gettimeus();
         boxes = denet_process.run(src_image);
-        time_end = get_current_time();
+        time_end = gettimeus();
         std::cout << "det2d cost time: " <<  (time_end - time_start)/1000.0  << "ms" << std::endl;
 
         save_result << image_name << "|";

@@ -46,7 +46,7 @@ static void* heart_send_pthread(void* arg)
 		sendto(*broadcast_socket_fd, send_result.str().c_str(), strlen(send_result.str().c_str()), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)); 
 		sleep(1);
 	}
-	strcpy(buf, "1|LPR Stop!");
+	strcpy(buf, "100|LPR Stop!");
 	sendto(*broadcast_socket_fd, buf, strlen(buf), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)); 
 	close(*broadcast_socket_fd);
 	LOG(WARNING) << "upd broadcast thread quit!";
@@ -241,11 +241,11 @@ int NetWorkProcess::process_recv()
 	int result = 0;
 	if(sem_wait(&sem_put) == 0)
 	{
-		if(recv_code == 100)
+		if(recv_code == 101)
 		{
 			send_log_path();
 		}
-		else if(recv_code == 101)
+		else if(recv_code == 102)
 		{
 			send_save_data();
 		}
@@ -270,6 +270,22 @@ int NetWorkProcess::send_result(const std::string &lpr_result, const int code)
 		0, (struct sockaddr *)&dest_addr,sizeof(dest_addr));
 	pthread_mutex_unlock(&send_mutex);
 	LOG(WARNING) << send_result.str().c_str();
+	return 0;
+}
+
+int NetWorkProcess::send_error(const int code)
+{
+	struct timeval tv;  
+    char time_str[64];
+	std::stringstream send_str;
+	gettimeofday(&tv, NULL); 
+	strftime(time_str, sizeof(time_str)-1, "%Y-%m-%d_%H:%M:%S", localtime(&tv.tv_sec)); 
+	send_str <<  code << "|" << time_str;
+	pthread_mutex_lock(&send_mutex);
+	sendto(udp_socket_fd, send_str.str().c_str(), strlen(send_str.str().c_str()), \
+		0, (struct sockaddr *)&dest_addr,sizeof(dest_addr));
+	pthread_mutex_unlock(&send_mutex);
+	LOG(WARNING) << send_str.str().c_str();
 	return 0;
 }
 

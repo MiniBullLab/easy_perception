@@ -40,9 +40,8 @@
 #include <basetypes.h>
 #include <eazyai.h>
 #include "cnn_lpr/lpr_third_party/Pipeline.h"
-#include "ssd_lpr_common.h"
-#include "lpr.hpp"
 #include "utils.hpp"
+#include "lpr.hpp"
 
 #define LICENSE_PREPROC_RESIZE_W	(140)
 #define LICENSE_PREPROC_RESIZE_H	(60)

@@ -183,3 +183,39 @@ int get_in_out(const std::vector<int> &result_list)
 		return -1;
 	}
 }
+
+int has_motion_target(const cv::Mat &fg_output)
+{
+	int result = 0;
+	int cannyThreshold = 10;
+	cv::Mat fgMask; //fg mask fg mask generated
+    cv::Mat edgeFrame;//边沿图像
+    std::vector< std::vector<cv::Point> > contours; //存储轮廓
+    std::vector<cv::Vec4i> hierarchy;//轮廓索引编号
+	std::vector<cv::Point> contours_hull;
+	if (fg_output.empty())
+    {
+        return 0;
+    }
+	cv::Mat elementBGS = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2 * 2 + 1, 2 * 2 + 1), cv::Point(2, 2));
+	cv::morphologyEx(fg_output, fgMask, cv::MORPH_OPEN, elementBGS, cv::Point(-1,-1),1); //形态学操作，开运算
+    cv::morphologyEx(fgMask, fgMask, cv::MORPH_CLOSE, elementBGS);//闭运算
+	//使用Canny算子检测边缘
+    // cv::Canny(fgMask, edgeFrame, cannyThreshold,  cannyThreshold * 3, 3);
+    //寻找轮廓
+    cv::findContours(fgMask, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+    //得到轮廓的
+    for (int i = 0; i < contours.size(); i++)
+    {
+		for(int i = 0; i < contours.size(); i++)
+		{
+			cv::convexHull(cv::Mat(contours[i]), contours_hull, true);
+			//cv::approxPolyDP(cv::Mat(contours[i]), contours_hull, 3, true);
+			if(cv::contourArea(contours_hull) >= 10)
+			{
+				result++;
+			}
+		}
+    }
+	return result;
+}

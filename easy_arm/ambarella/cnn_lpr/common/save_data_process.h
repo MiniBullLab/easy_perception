@@ -22,8 +22,8 @@
 #define SAVE_TOF_BUFFER_SIZE (5)
 #define SAVE_IMAGE_BUFFER_SIZE (5)
 #elif defined(IS_SAVE)
-#define SAVE_TOF_BUFFER_SIZE (2)
-#define SAVE_IMAGE_BUFFER_SIZE (3)
+#define SAVE_TOF_BUFFER_SIZE (5)
+#define SAVE_IMAGE_BUFFER_SIZE (5)
 #else
 #define SAVE_TOF_BUFFER_SIZE (1)
 #define SAVE_IMAGE_BUFFER_SIZE (1)
@@ -32,6 +32,7 @@
 struct SaveTofBuffer  
 {  	
     cv::Mat buffer[SAVE_TOF_BUFFER_SIZE];
+    long buffer_stamp[SAVE_TOF_BUFFER_SIZE];
     pthread_mutex_t lock; /* 互斥体lock 用于对缓冲区的互斥操作 */  
     int readpos, writepos; /* 读写指针*/  
     pthread_cond_t notempty; /* 缓冲区非空的条件变量 */  
@@ -41,6 +42,7 @@ struct SaveTofBuffer
 struct SaveImageBuffer  
 {  	
     cv::Mat buffer[SAVE_IMAGE_BUFFER_SIZE];
+    long buffer_stamp[SAVE_IMAGE_BUFFER_SIZE];
     pthread_mutex_t lock; /* 互斥体lock 用于对缓冲区的互斥操作 */  
     int readpos, writepos; /* 读写指针*/  
     pthread_cond_t notempty; /* 缓冲区非空的条件变量 */  
@@ -70,18 +72,17 @@ public:
     int offline_start();
     int offline_stop();
 
-    void put_image_data(cv::Mat &src_image);
-    void put_tof_data(cv::Mat &depth_map);
+    void put_image_data(cv::Mat &src_image, const long stamp);
+    void put_tof_data(cv::Mat &depth_map, const long stamp);
 
     void get_image(cv::Mat &src_image);
-
     void get_image_yuv(cv::Mat &src_image);
-
     void get_tof_depth_map(cv::Mat &depth_map);
 
     void save_image(const cv::Mat &src_image, const long stamp);
     void save_image(const unsigned char *yuv_data, const long stamp);
     void save_depth_map(const cv::Mat &depth_map, const long stamp);
+    void save_depth_map(const cv::Mat &depth_map, const std::string &save_path);
     void save_tof_z(const unsigned char* tof_data);
 
 private:
