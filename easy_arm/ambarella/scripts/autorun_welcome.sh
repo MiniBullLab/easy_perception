@@ -16,7 +16,7 @@ test_encode --resource-cfg /usr/local/bin/scripts/cv25_vin0_1080p_vin1_240x180_t
 test_encode -C -h 1920x1080 -b 2 -e
 rtsp_server &
 test_mempart -m 4 -f
-test_mempart -m 4 -s 0x02000000
+test_mempart -m 4 -s 0x04000000
 
 # init.sh --yuv480p
 # modprobe imx316_mipi bus_id=0x2 vinc_id=0x1 trigger_mode=1

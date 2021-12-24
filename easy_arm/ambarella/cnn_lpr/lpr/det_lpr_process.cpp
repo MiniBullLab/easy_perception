@@ -6,6 +6,7 @@
 #define DEFAULT_NMS_TOP_K			(100)
 #define DEFAULT_NMS_THRES			(0.45f)
 #define DEFAULT_SSD_CONF_THRES		(0.3f)
+#define DEFAULT_YOLOV5_CONF_THRES   (0.5f)
 
 const static std::string ssd_model_path = "/data/lpr/mobilenetv1_ssd_cavalry.bin";
 const static std::string ssd_priorbox_path = "/data/lpr/lpr_priorbox_fp32.bin";
@@ -89,7 +90,7 @@ int init_yolov5(yolov5_t *live_ctx, global_control_param_t *G_param)
 		net_params.model_path = yolov5_model_path.c_str();
 		net_params.label_path = NULL;
 
-		net_params.conf_threshold = 0.5f;
+		net_params.conf_threshold = DEFAULT_YOLOV5_CONF_THRES;
 		net_params.nms_threshold = 0.5f;
 		net_params.keep_top_k = DEFAULT_NMS_TOP_K;
 		RVAL_OK(yolov5_init(live_ctx, &net_params));

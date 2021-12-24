@@ -21,13 +21,11 @@
 #if defined(ONLY_SAVE_DATA) || defined(ONLY_SEND_DATA)
 #define IMAGE_BUFFER_SIZE (5)
 #define IMAGE_BUFFER_SIZE (5)
-#elif defined(OFFLINE_DATA)
-#define IMAGE_BUFFER_SIZE (1)
 #else
 #define IMAGE_BUFFER_SIZE (2)
 #endif
-#define IMAGE_WIDTH (1920)
-#define IMAGE_HEIGHT (1080)
+#define IMAGE_WIDTH (1280)
+#define IMAGE_HEIGHT (720)
 #define IMAGE_YUV_SIZE		(IMAGE_WIDTH * IMAGE_HEIGHT * 3 / 2) //yuv420
 
 struct ImageBuffer  

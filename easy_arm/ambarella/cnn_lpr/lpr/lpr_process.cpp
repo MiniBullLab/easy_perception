@@ -41,7 +41,7 @@ int ssd_critical_resource(
 				ssd_mid_buf->bbox_param[0].p4_x = 0;
 				ssd_mid_buf->bbox_param[0].p4_y = 0;
 				score = amba_ssd_result[i].score;
-				LOG(WARNING) << "best bbox: " << amba_ssd_result[i].bbox.x_min << " " << amba_ssd_result[i].bbox.y_min << " " \
+				LOG(INFO) << "best bbox: " << amba_ssd_result[i].bbox.x_min << " " << amba_ssd_result[i].bbox.y_min << " " \
 				 << amba_ssd_result[i].bbox.x_max << " " << amba_ssd_result[i].bbox.y_max;
 				LOG(WARNING) << "best bbox score: " << score;
 			}
@@ -111,7 +111,7 @@ int yolov5_critical_resource(
 				}
 
 				score = yolov5_result[i].score;
-				LOG(WARNING) << "best bbox: " << yolov5_result[i].x_start << " " << yolov5_result[i].y_start << " " \
+				LOG(INFO) << "best bbox: " << yolov5_result[i].x_start << " " << yolov5_result[i].y_start << " " \
 				 << yolov5_result[i].x_end << " " << yolov5_result[i].y_end;
 				LOG(WARNING) << "best bbox score: " << score;
 			}
@@ -203,8 +203,44 @@ int init_LPR(LPR_ctx_t *LPR_ctx, global_control_param_t *G_param)
 	return rval;
 }
 
+void bbox_list_process(const bbox_list_t *list_lpr_bbox, bbox_list_t *result_bbox)
+{
+	std::vector<bbox_param_t> result;
+	int input_count = list_lpr_bbox->bbox_num;
+	int output_count = 0;
+	ResultRect input_bbox[MAX_OVERLAY_PLATE_NUM] = {0};
+	ResultRect output_bbox[MAX_OVERLAY_PLATE_NUM] = {0};
+	result_bbox->bbox_num = 0;
+	if(list_lpr_bbox->bbox_num <= 0)
+	{
+		return;
+	}
+	for(size_t i = 0; i < list_lpr_bbox->bbox_num; i++)
+	{
+		input_bbox[i].x = (long)list_lpr_bbox->bbox[i].norm_min_x;
+		input_bbox[i].y = (long)list_lpr_bbox->bbox[i].norm_min_y;
+		input_bbox[i].width = (long)(list_lpr_bbox->bbox[i].norm_max_x - list_lpr_bbox->bbox[i].norm_min_x);
+		input_bbox[i].height = (long)(list_lpr_bbox->bbox[i].norm_max_y - list_lpr_bbox->bbox[i].norm_min_y);
+		input_bbox[i].confidence = 0;
+	}
+	if(input_count > 0)
+	{
+		clusteringRect(input_bbox, input_count, 0.12f, output_bbox, &output_count);
+		for(size_t i = 0; i < output_count; i++)
+		{
+			bbox_param_t bbox = {0};
+			bbox.norm_min_x = (float)output_bbox[i].x;
+			bbox.norm_min_y = (float)output_bbox[i].y;
+			bbox.norm_max_x = (float)(output_bbox[i].x + output_bbox[i].width);
+			bbox.norm_max_y = (float)(output_bbox[i].y + output_bbox[i].height);
+			result_bbox->bbox[i] = bbox;
+		}
+		result_bbox->bbox_num = output_count;
+	}
+}
+
 void draw_overlay_preprocess(draw_plate_list_t *draw_plate_list,
-	license_list_t *license_result, bbox_param_t *bbox_param, global_control_param_t *G_param)
+	license_list_t *license_result, bbox_param_t *bbox_param, uint32_t debug_en)
 {
 	uint32_t i = 0;
 	int draw_num = 0;
@@ -213,9 +249,12 @@ void draw_overlay_preprocess(draw_plate_list_t *draw_plate_list,
 	license_info_t *license_info = license_result->license_info;
 
 	license_result->license_num = min(license_result->license_num, MAX_OVERLAY_PLATE_NUM);
+
+	
 	for (i = 0; i < license_result->license_num; ++i) {
-		if (license_info[i].conf > DEFAULT_LPR_CONF_THRES &&
-			strlen(license_info[i].text) == CHINESE_LICENSE_STR_LEN) {
+		size_t char_len = strlen(license_info[i].text);
+		if (license_info[i].conf > DEFAULT_LPR_CONF_THRES && \
+			(char_len == 9 || char_len == 10)) {
 			upscale_normalized_rectangle(bbox_param[i].norm_min_x, bbox_param[i].norm_min_y,
 			bbox_param[i].norm_max_x, bbox_param[i].norm_max_y,
 				DRAW_LICNESE_UPSCALE_W, DRAW_LICNESE_UPSCALE_H, &scaled_bbox_draw[i]);
@@ -228,7 +267,7 @@ void draw_overlay_preprocess(draw_plate_list_t *draw_plate_list,
 			snprintf(plates[draw_num].text, sizeof(plates[draw_num].text), "%s", license_info[i].text);
 			plates[draw_num].text[sizeof(plates[draw_num].text) - 1] = '\0';
 			++draw_num;
-			if (G_param->debug_en > 0) {
+			if (debug_en > 0) {
 				LOG(INFO) << "Drawed license:" << license_info[i].text << "," << license_info[i].conf;
 			}
 		}
@@ -236,45 +275,4 @@ void draw_overlay_preprocess(draw_plate_list_t *draw_plate_list,
 	draw_plate_list->license_num = draw_num;
 
 	return;
-}
-
-std::vector<bbox_param_t> bbox_list_process(const std::vector<bbox_param_t> &list_lpr_bbox)
-{
-	std::vector<bbox_param_t> result;
-	int input_count = 0;
-	int output_count = 0;
-	ResultRect input_bbox[30] = {0};
-	ResultRect output_bbox[30] = {0};
-	result.clear();
-	if(list_lpr_bbox.size() <= 0)
-	{
-		return result;
-	}
-	for(size_t i = list_lpr_bbox.size() - 14; i >= 0; i--)
-	{
-		input_bbox[input_count].x = (int)list_lpr_bbox[i].norm_min_x;
-		input_bbox[input_count].y = (int)list_lpr_bbox[i].norm_min_y;
-		input_bbox[input_count].width = (int)(list_lpr_bbox[i].norm_max_x - list_lpr_bbox[i].norm_min_x);
-		input_bbox[input_count].height = (int)(list_lpr_bbox[i].norm_max_y - list_lpr_bbox[i].norm_min_y);
-		input_bbox[input_count].confidence = 0;
-		input_count++;
-		if(input_count >= 30)
-		{
-			break;
-		}
-	}
-	if(input_count > 0)
-	{
-		clusteringRect(input_bbox, input_count, 0.1f, output_bbox, &output_count);
-		for(size_t i = 0; i < output_count; i++)
-		{
-			bbox_param_t bbox = {0};
-			bbox.norm_min_x = (float)output_bbox[i].x;
-			bbox.norm_min_y = (float)output_bbox[i].y;
-			bbox.norm_max_x = (float)(output_bbox[i].x + output_bbox[i].width);
-			bbox.norm_max_y = (float)(output_bbox[i].y + output_bbox[i].height);
-			result.push_back(bbox);
-		}
-	}
-	return result;
 }

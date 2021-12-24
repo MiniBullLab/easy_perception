@@ -276,6 +276,8 @@ static void * show_overlay_thread(void* overlay_thread_param)
 	struct timespec outtime;
 	struct timeval now;
 
+	char score_str[STRING_SIZE] = {0};
+
 	prctl(PR_SET_NAME, "show_overlay_thread");
 
 	while (overlay_ctx.run_flag) {
@@ -331,7 +333,7 @@ static void * show_overlay_thread(void* overlay_thread_param)
 		}
 
 		gettimeofday(&now, NULL);
-		outtime.tv_sec = now.tv_sec + 1; // wait at most 1 sec or quit
+		outtime.tv_sec = now.tv_sec + 2; // wait at most 1 sec or quit
 		outtime.tv_nsec = now.tv_usec * 1000;
 		pthread_mutex_lock(&overlay_ctx.bbox_mutex);
 		while (overlay_ctx.update_cond_flag == 0) {
@@ -348,19 +350,40 @@ static void * show_overlay_thread(void* overlay_thread_param)
 			break;
 		}
 		overlay_ctx.update_cond_flag = 0;
+		ea_display_obj_params(overlay_ctx.display)->border_thickness = 4;
 		for (i = 0; i < overlay_ctx.bbox_list.bbox_num; ++i) {
-			RVAL_OK(ea_display_set_bbox(overlay_ctx.display, "",
+			snprintf(score_str, STRING_SIZE, "%.3f", overlay_ctx.bbox_list.bbox[i].score);
+			RVAL_OK(ea_display_set_bbox(overlay_ctx.display, score_str,
 				overlay_ctx.bbox_list.bbox[i].norm_min_x, overlay_ctx.bbox_list.bbox[i].norm_min_y,
 				overlay_ctx.bbox_list.bbox[i].norm_max_x - overlay_ctx.bbox_list.bbox[i].norm_min_x,
 				overlay_ctx.bbox_list.bbox[i].norm_max_y - overlay_ctx.bbox_list.bbox[i].norm_min_y));
 		}
+#if !defined(OLD_CODE)
+		//landmark
+		ea_display_obj_params(overlay_ctx.display)->border_thickness = 1;
+		for (i = 0; i < overlay_ctx.bbox_list.bbox_num; i++) {
+			ea_display_obj_params(overlay_ctx.display)->box_color = (ea_16_colors_t)2;
+			RVAL_OK(ea_display_set_bbox(overlay_ctx.display, NULL,
+				    overlay_ctx.bbox_list.bbox[i].p1_x-0.005, overlay_ctx.bbox_list.bbox[i].p1_y-0.005, 0.01, 0.01));	
+			ea_display_obj_params(overlay_ctx.display)->box_color = (ea_16_colors_t)6;
+			RVAL_OK(ea_display_set_bbox(overlay_ctx.display, NULL,
+				    overlay_ctx.bbox_list.bbox[i].p2_x-0.005, overlay_ctx.bbox_list.bbox[i].p2_y-0.005, 0.01, 0.01));	
+			ea_display_obj_params(overlay_ctx.display)->box_color = (ea_16_colors_t)11;
+			RVAL_OK(ea_display_set_bbox(overlay_ctx.display, NULL,
+				    overlay_ctx.bbox_list.bbox[i].p3_x-0.005, overlay_ctx.bbox_list.bbox[i].p3_y-0.005, 0.01, 0.01));	
+			ea_display_obj_params(overlay_ctx.display)->box_color = (ea_16_colors_t)15;
+			RVAL_OK(ea_display_set_bbox(overlay_ctx.display, NULL,
+				    overlay_ctx.bbox_list.bbox[i].p4_x-0.005, overlay_ctx.bbox_list.bbox[i].p4_y-0.005, 0.01, 0.01));
+		}
+#endif
+		ea_display_obj_params(overlay_ctx.display)->border_thickness = 2;
 		for (i = 0; i < overlay_ctx.car_bbox_list.bbox_num; ++i) {
 			RVAL_OK(ea_display_set_bbox(overlay_ctx.display, "car",
 				overlay_ctx.car_bbox_list.bbox[i].norm_min_x, overlay_ctx.car_bbox_list.bbox[i].norm_min_y,
 				overlay_ctx.car_bbox_list.bbox[i].norm_max_x - overlay_ctx.car_bbox_list.bbox[i].norm_min_x,
 				overlay_ctx.car_bbox_list.bbox[i].norm_max_y - overlay_ctx.car_bbox_list.bbox[i].norm_min_y));
 		}
-		RVAL_OK(ea_display_refresh(overlay_ctx.display, (void *)(uint64_t)overlay_ctx.dsp_pts));
+		RVAL_OK(ea_display_refresh(overlay_ctx.display, (void *)0));
 		pthread_mutex_unlock(&overlay_ctx.bbox_mutex);
 	}
 	if (rval < 0) {

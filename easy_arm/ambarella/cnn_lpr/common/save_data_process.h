@@ -18,10 +18,7 @@
 #if defined(ONLY_SAVE_DATA) || defined(ONLY_SEND_DATA)
 #define SAVE_TOF_BUFFER_SIZE (1)
 #define SAVE_IMAGE_BUFFER_SIZE (1)
-#elif defined(OFFLINE_DATA)
-#define SAVE_TOF_BUFFER_SIZE (5)
-#define SAVE_IMAGE_BUFFER_SIZE (5)
-#elif defined(IS_SAVE)
+#elif defined(OFFLINE_DATA) || defined(IS_SAVE)
 #define SAVE_TOF_BUFFER_SIZE (5)
 #define SAVE_IMAGE_BUFFER_SIZE (5)
 #else

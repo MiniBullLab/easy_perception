@@ -38,6 +38,7 @@
 #ifndef __OVERLAY_TOOL_H__
 #define __OVERLAY_TOOL_H__
 
+//#define OLD_CODE
 #define IS_SHOW
 
 #ifndef STRING_SIZE
@@ -50,10 +51,10 @@
 #define MIN_X_OFFSET			(0.0f)
 #define DEFAULT_X_OFFSET		(0.0f)
 #define MAX_X_OFFSET			(1.0f)
-#define MIN_HIGHLIGHT_SEC		(0)
+#define MIN_HIGHLIGHT_SEC		(1)
 #define DEFAULT_HIGHLIGHT_SEC	(5)
 #define MAX_HIGHLIGHT_SEC		(1 << 15)
-#define MIN_CLEAR_SEC			(0)
+#define MIN_CLEAR_SEC			(1)
 #define DEFAULT_CLEAR_SEC		(30)
 #define MAX_CLEAR_SEC			(1 << 15)
 #define MIN_WIDTH_RATIO			(0.9f)
@@ -64,7 +65,15 @@
 #define DRAW_PLATE_HEIGHT		(64)
 #define DRAW_PLATE_WIDTH		(256)
 
-typedef struct bbox_param_s bbox_param_t;
+typedef struct has_lpr_list_s {
+	int has[MAX_OVERLAY_PLATE_NUM];
+	uint32_t bbox_num;
+} has_lpr_list_t;
+
+typedef struct has_car_list_s {
+	int has[MAX_OVERLAY_PLATE_NUM];
+	uint32_t bbox_num;
+} has_car_list_t;
 
 typedef struct bbox_list_s {
 	bbox_param_t bbox[MAX_OVERLAY_PLATE_NUM];
@@ -93,7 +102,6 @@ int init_overlay_tool(int stream_id, float x_offset,
 	uint32_t highlight_sec, uint32_t clear_sec, float width_ratio,
 	uint32_t draw_plate_num, uint32_t debug_en);
 void deinit_overlay_tool();
-
 
 #endif
 

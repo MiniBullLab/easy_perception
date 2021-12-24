@@ -18,9 +18,11 @@ public:
 
 	bool initModel(const std::string& pathStr);
 
-	cv::Mat cropImageROI(const cv::Mat &srcImage, const std::vector<cv::Point> &polygon);
+	cv::Mat cropImageROI(const cv::Mat &srcImage, const std::vector<cv::Point2f> &polygon);
 	
 	std::vector<TextLine> getTextLines(std::vector<cv::Mat>& partImg);
+
+	TextLine getTextLine(const cv::Mat& src);
 
 private:
 	ncnn::Net net;
@@ -31,8 +33,6 @@ private:
 	std::vector<std::string> keys;
 
 	TextLine scoreToTextLine(const std::vector<float>& outputData, int h, int w);
-
-	TextLine getTextLine(const cv::Mat& src);
 };
 
 

@@ -26,7 +26,7 @@ bool RecNet::initModel(const std::string& pathStr) {
 	return true;
 }
 
-cv::Mat RecNet::cropImageROI(const cv::Mat &srcImage, const std::vector<cv::Point> &polygon)
+cv::Mat RecNet::cropImageROI(const cv::Mat &srcImage, const std::vector<cv::Point2f> &polygon)
 {
     cv::Scalar borderValue;
     if(srcImage.channels() == 1)
@@ -39,30 +39,40 @@ cv::Mat RecNet::cropImageROI(const cv::Mat &srcImage, const std::vector<cv::Poin
     }
     cv::Point2f srcpoint[4];//存放变换前四顶点
     cv::Point2f dstpoint[4];//存放变换后四顶点
-    cv::RotatedRect rect = cv::minAreaRect(polygon);
-    float width = rect.size.width;
-    float height = rect.size.height;
-    rect.points(srcpoint);//获取最小外接矩形四顶点坐标
-    dstpoint[0]= cv::Point2f(0, height);
-    dstpoint[1] = cv::Point2f(0, 0);
-    dstpoint[2] = cv::Point2f(width, 0);
-    dstpoint[3] = cv::Point2f(width, height);
+    // cv::RotatedRect rect = cv::minAreaRect(polygon);
+    // float width = rect.size.width * 1.1;
+    // float height = rect.size.height * 1.1;
+	float width = 160;
+    float height = 40;
+    // rect.points(srcpoint);//获取最小外接矩形四顶点坐标
+	srcpoint[0]= polygon[0];
+    srcpoint[1] = polygon[1];
+    srcpoint[2] = polygon[2];
+    srcpoint[3] = polygon[3];
+    dstpoint[0] = cv::Point2f(0, 0);
+    dstpoint[1] = cv::Point2f(width, 0);
+    dstpoint[2] = cv::Point2f(width, height);
+	dstpoint[3]= cv::Point2f(0, height);
+    // dstpoint[0]= cv::Point2f(0, height);
+    // dstpoint[1] = cv::Point2f(0, 0);
+    // dstpoint[2] = cv::Point2f(width, 0);
+    // dstpoint[3] = cv::Point2f(width, height);
     cv::Mat M = cv::getPerspectiveTransform(srcpoint, dstpoint);
     cv::Mat result = cv::Mat::zeros(cv::Size(width, height), CV_8UC3);
     cv::warpPerspective(srcImage, result, M, result.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT, borderValue);
-    std::cout << "width:" << result.cols << " height:" << result.rows << std::endl;
-    if((result.rows * 1.0f / result.cols) >= 2.0f)
-    {
-        // cv::Point2f center;
-        // center.x = float(result.cols / 2.0);
-        // center.y = float(result.rows / 2.0);
-        // int length = cv::sqrt(result.cols * result.cols + result.rows * result.rows);
-        // cv::Mat M = cv::getRotationMatrix2D(center, -90, 1);
-        // cv::warpAffine(src, src_rotate, M, Size(length, length), 1, 0, Scalar(0, 0, 0));
-        cv::Mat temp;
-        cv::transpose(result, temp);
-        cv::flip(temp, result, 0);
-    }
+    // std::cout << "width:" << result.cols << " height:" << result.rows << std::endl;
+    // if((result.rows * 1.0f / result.cols) >= 2.0f)
+    // {
+    //     // cv::Point2f center;
+    //     // center.x = float(result.cols / 2.0);
+    //     // center.y = float(result.rows / 2.0);
+    //     // int length = cv::sqrt(result.cols * result.cols + result.rows * result.rows);
+    //     // cv::Mat M = cv::getRotationMatrix2D(center, -90, 1);
+    //     // cv::warpAffine(src, src_rotate, M, Size(length, length), 1, 0, Scalar(0, 0, 0));
+    //     cv::Mat temp;
+    //     cv::transpose(result, temp);
+    //     cv::flip(temp, result, 0);
+    // }
     return result;
 }
 

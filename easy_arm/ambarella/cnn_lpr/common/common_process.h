@@ -25,7 +25,6 @@
 #include <opencv2/imgproc.hpp>
 
 #include "cnn_lpr/lpr/utils.hpp"
-//#include "cnn_lpr/lpr/ssd_lpr_common.h"
 #include "cnn_lpr/lpr/state_buffer.h"
 #include "cnn_lpr/show/overlay_tool.h"
 
@@ -67,6 +66,8 @@ int env_init(global_control_param_t *G_param);
 void env_deinit(global_control_param_t *G_param);
 
 int tensor2mat_yuv2bgr_nv12(ea_tensor_t *tensor, cv::Mat &bgr);
+
+int tensor2mat_yuv2bgr_nv12(ea_tensor_t *tensor, const uint16_t pitch, cv::Mat &bgr);
 
 void swapYUV_I420toNV12(const unsigned char* i420bytes, unsigned char* nv12bytes, int width, int height);
 

@@ -1,9 +1,14 @@
 #include "common_process.h"
 #include <iostream>
 
-#define DEFAULT_STATE_BUF_NUM		(3)
+#define DEFAULT_STATE_BUF_NUM		(5)
+#if defined(OLD_CODE)
 #define DEFAULT_STREAM_ID			(2)
 #define DEFAULT_CHANNEL_ID			(2)
+#else
+#define DEFAULT_STREAM_ID			(2)
+#define DEFAULT_CHANNEL_ID			(3)
+#endif
 #define DEFAULT_RGB_TYPE			(1) /* 0: RGB, 1:BGR */
 
 int init_param(global_control_param_t *G_param)
@@ -39,8 +44,13 @@ int env_init(global_control_param_t *G_param)
 			| EA_ENV_ENABLE_VPROC
 			| EA_ENV_ENABLE_NNCTRL
 			| EA_ENV_ENABLE_OSD_STREAM));
+#if defined(OLD_CODE)
+		G_param->img_resource = ea_img_resource_new(EA_PYRAMID,
+					(void *)(unsigned long)G_param->channel_id);
+#else
 		G_param->img_resource = ea_img_resource_new(EA_CANVAS,
 			(void *)(unsigned long)G_param->channel_id);
+#endif
 		RVAL_ASSERT(G_param->img_resource != NULL);
 #ifdef IS_SHOW
 		RVAL_OK(init_overlay_tool(G_param->stream_id,
@@ -86,7 +96,7 @@ int tensor2mat_yuv2bgr_nv12(ea_tensor_t *tensor, cv::Mat &bgr)
 		ea_tensor_shape(tensor)[3], CV_8UC1);
 	uint8_t *p_src = NULL;
 	uint8_t *p_dst = NULL;
-	size_t h;
+	size_t h = 0;
 
 	do {
 		RVAL_ASSERT(ea_tensor_shape(tensor)[1] == 1);
@@ -115,6 +125,48 @@ int tensor2mat_yuv2bgr_nv12(ea_tensor_t *tensor, cv::Mat &bgr)
 		#endif
 	} while (0);
 
+	return rval;
+}
+
+int tensor2mat_yuv2bgr_nv12(ea_tensor_t *tensor, const uint16_t pitch, cv::Mat &bgr)
+{
+	int rval = EA_SUCCESS;
+	size_t img_shape[4] = {1, 3, bgr.rows, bgr.cols};
+	ea_tensor_t *img_tensor = ea_tensor_new(EA_U8, img_shape, pitch);
+	std::vector<cv::Mat> channel_s;
+	uint8_t *p_src = NULL;
+	uint8_t *p_dst = NULL;
+	size_t h = 0;
+	cv::split(bgr, channel_s);
+	do {
+		RVAL_ASSERT(ea_tensor_shape(tensor)[1] == 1);
+		RVAL_OK(ea_cvt_color_resize(tensor, img_tensor, EA_COLOR_YUV2BGR_NV12, EA_VP));
+		
+		p_src = (uint8_t *)ea_tensor_data_for_read(img_tensor, EA_CPU);
+		p_dst = channel_s[0].data;
+		for (h = 0; h < ea_tensor_shape(img_tensor)[2]; h++) {
+			memcpy(p_dst, p_src, ea_tensor_shape(img_tensor)[3]);
+			p_src += ea_tensor_pitch(img_tensor);
+			p_dst += ea_tensor_shape(img_tensor)[3];
+		}
+
+		p_dst = channel_s[1].data;
+		for (h = 0; h < ea_tensor_shape(img_tensor)[2]; h++) {
+			memcpy(p_dst, p_src, ea_tensor_shape(img_tensor)[3]);
+			p_src += ea_tensor_pitch(img_tensor);
+			p_dst += ea_tensor_shape(img_tensor)[3];
+		}
+
+		p_dst = channel_s[2].data;
+		for (h = 0; h < ea_tensor_shape(img_tensor)[2]; h++) {
+			memcpy(p_dst, p_src, ea_tensor_shape(img_tensor)[3]);
+			p_src += ea_tensor_pitch(img_tensor);
+			p_dst += ea_tensor_shape(img_tensor)[3];
+		}
+		cv::merge(channel_s, bgr);
+	} while (0);
+	ea_tensor_free(img_tensor);
+	img_tensor = NULL;
 	return rval;
 }
 

@@ -7,7 +7,11 @@
 
 #include "cnn_lpr/clustering/clustering_rect.h"
 
+#if defined(OLD_CODE)
+#define DEFAULT_LPR_CONF_THRES		(0.9f)
+#else
 #define DEFAULT_LPR_CONF_THRES		(0.5f)
+#endif
 #define CHINESE_LICENSE_STR_LEN		(9)
 #define DRAW_LICNESE_UPSCALE_H		(1.0f)
 #define DRAW_LICNESE_UPSCALE_W		(0.2f)
@@ -27,10 +31,9 @@ int lpr_critical_resource(uint16_t *license_num, bbox_param_t *bbox_param,
 
 int init_LPR(LPR_ctx_t *LPR_ctx, global_control_param_t *G_param);
 
+void bbox_list_process(const bbox_list_t *list_lpr_bbox, bbox_list_t *result_bbox);
+
 void draw_overlay_preprocess(draw_plate_list_t *draw_plate_list,
-	license_list_t *license_result, bbox_param_t *bbox_param, global_control_param_t *G_param);
-
-
-std::vector<bbox_param_t> bbox_list_process(const std::vector<bbox_param_t> &list_lpr_bbox);
+	license_list_t *license_result, bbox_param_t *bbox_param, uint32_t debug_en);
 
 #endif // _LPR_PROCESS_H_

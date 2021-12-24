@@ -440,7 +440,8 @@ static void *offline_image_pthread(void* save_data)
 		{  
 			pthread_cond_wait(&image_buffer.notfull, &image_buffer.lock);  
 		}
-		image_buffer.buffer[image_buffer.writepos] = cv::imread(temp_str.str());
+        cv::Mat src_image = cv::imread(temp_str.str());
+        cv::resize(src_image, image_buffer.buffer[image_buffer.writepos], cv::Size(IMAGE_WIDTH, IMAGE_HEIGHT));
         if(!image_buffer.buffer[image_buffer.writepos].empty())
         {
             image_buffer.writepos++;

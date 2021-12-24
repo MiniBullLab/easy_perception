@@ -22,9 +22,6 @@
 #include "cnn_lpr/network/network_process.h"
 #include "cnn_lpr/common/save_data_process.h"
 
-#define DEFAULT_SSD_LAYER_ID		(0)
-#define DEFAULT_LPR_LAYER_ID		(0)
-
 #define CLASS_NUMBER (1)
 
 #define FRAME_HEADER1	(0x55)
@@ -37,12 +34,20 @@
 #define TIME_MEASURE_LOOPS			(20)
 
 #define IS_LPR_RUN
-//#define IS_CAR_RUN
-//#define IS_PC_RUN
+#define IS_CAR_RUN
+#define IS_PC_RUN
 
-static std::vector<int> list_has_lpr;
-static std::vector<int> list_has_car;
-static std::vector<bbox_param_t> list_lpr_bbox;
+#if defined(OLD_CODE)
+#define DEFAULT_SSD_LAYER_ID		(1)
+#define DEFAULT_LPR_LAYER_ID		(0)
+#else
+#define DEFAULT_SSD_LAYER_ID		(0)
+#define DEFAULT_LPR_LAYER_ID		(0)
+#endif
+
+static has_car_list_t list_has_lpr;
+static has_lpr_list_t list_has_car;
+static bbox_list_t list_lpr_bbox;
 static float lpr_confidence = 0;
 static std::string lpr_result = "";
 
@@ -148,27 +153,20 @@ static int send_count = 0;
 static void merge_all_result(const int in_out_result)
 {
 	int final_result = in_out_result;
-	size_t lpr_count = list_lpr_bbox.size();
 	int lpr_in_out = 0;
 	int has_car = 0;
-	int sum_count = 0;
 	float car_sum = 0;
 	float lpr_sum = 0;
-	std::vector<bbox_param_t> result_bbox;
-	if(list_has_car.size() > 0)
+	bbox_list_t result_bbox;
+	if(list_has_car.bbox_num >= 3)
 	{
-		sum_count = 0;
-		for (size_t i = list_has_car.size() - 14; i >= 0; i--)
+		car_sum = 0;
+		for (int i = 0; i < list_has_car.bbox_num; i++)
 		{
-			car_sum += list_has_car[i];
-			sum_count++;
-			if(sum_count > 30)
-			{
-				break;
-			}
+			car_sum += list_has_car.has[i];
 		}
-		car_sum = car_sum / sum_count;
-		if(lpr_sum > 0.5f)
+		car_sum = car_sum / list_has_car.bbox_num;
+		if(car_sum > 0.5f)
 		{
 			has_car = 1;
 		}
@@ -178,21 +176,16 @@ static void merge_all_result(const int in_out_result)
 		}
 		LOG(WARNING) << "has_car: " << has_car << " " << car_sum;
 	}
-	if(lpr_count >= 3)
+	if(list_lpr_bbox.bbox_num >= 3)
 	{
-		sum_count = 0;
-		for (size_t i = list_has_lpr.size() - 14; i >= 0; i--)
+		lpr_sum = 0;
+		for (int i = 0; i < list_has_lpr.bbox_num; i++)
 		{
-			lpr_sum += list_has_lpr[i];
-			sum_count++;
-			if(sum_count > 30)
-			{
-				break;
-			}
+			lpr_sum += list_has_lpr.has[i];
 		}
-		if(sum_count > 10)
+		if(list_has_lpr.bbox_num > 10)
 		{
-			lpr_sum = lpr_sum / sum_count;
+			lpr_sum = lpr_sum / list_has_lpr.bbox_num;
 			if(lpr_sum > 0.5f)
 			{
 				lpr_in_out = 1;
@@ -205,44 +198,53 @@ static void merge_all_result(const int in_out_result)
 		LOG(WARNING) << "lpr_in_out: " << lpr_in_out << " " << lpr_sum;
 	}
 
-	result_bbox = bbox_list_process(list_lpr_bbox);
-	LOG(WARNING) << "result bbox: " <<  result_bbox.size();
-
-	if(send_count == 0 && final_result == 2)
-	{
-		final_result = 0;
-	}
-	if(send_count == 0 && lpr_in_out == 2)
-	{
-		lpr_in_out = 0;
-	}
-
-	if(send_count >= 1 && final_result == 1 && result_bbox.size() < 2)
-	{
-		final_result = 0;
-	}
-	if(send_count >= 1 && lpr_in_out == 1 && result_bbox.size() < 2)
-	{
-		lpr_in_out = 0;
-	}
+	LOG(WARNING) << "input bbox: " <<  list_lpr_bbox.bbox_num;
+	bbox_list_process(&list_lpr_bbox, &result_bbox);
+	LOG(WARNING) << "result bbox: " << result_bbox.bbox_num;
+	
+	// for (int i = 0; i < list_lpr_bbox.bbox_num; ++i) {
+	// 	list_lpr_bbox.bbox[i].norm_min_x = list_lpr_bbox.bbox[i].norm_min_x / IMAGE_WIDTH;
+	// 	list_lpr_bbox.bbox[i].norm_min_y = list_lpr_bbox.bbox[i].norm_min_y / IMAGE_HEIGHT;
+	// 	list_lpr_bbox.bbox[i].norm_max_x = list_lpr_bbox.bbox[i].norm_max_x / IMAGE_WIDTH;
+	// 	list_lpr_bbox.bbox[i].norm_max_y = list_lpr_bbox.bbox[i].norm_max_y / IMAGE_HEIGHT;
+	// }
+	// for (int i = 0; i < result_bbox.bbox_num; ++i) {
+	// 	result_bbox.bbox[i].norm_min_x = result_bbox.bbox[i].norm_min_x / IMAGE_WIDTH;
+	// 	result_bbox.bbox[i].norm_min_y = result_bbox.bbox[i].norm_min_y / IMAGE_HEIGHT;
+	// 	result_bbox.bbox[i].norm_max_x = result_bbox.bbox[i].norm_max_x / IMAGE_WIDTH;
+	// 	result_bbox.bbox[i].norm_max_y = result_bbox.bbox[i].norm_max_y / IMAGE_HEIGHT;
+	// }
+	// set_overlay_bbox(&list_lpr_bbox);
+	// set_car_bbox(&result_bbox);
+	// show_overlay(0);
 
 	if(final_result > 0)
 	{
+		if(send_count == 0 && final_result == 2)
+		{
+			return;
+		}
+		if(send_count >= 1 && result_bbox.bbox_num == 1)
+		{
+			return;
+		}
 		if(lpr_result != "" && lpr_confidence > 0)
 		{
 			network_process.send_result(lpr_result, final_result);
 			lpr_result = "";
-			send_count++;
 			lpr_confidence = 0;
+			send_count = 1;
 		}
 		else if(has_car > 0 && final_result == 1)
 		{
 			network_process.send_result("001", 3);
+			send_count = 1;
 		}
 		else if(has_car > 0 && final_result == 2)
 		{
 			network_process.send_result("001", 4);
 		}
+
 		if(final_result == 2)
 		{
 			send_count = 0;
@@ -250,198 +252,50 @@ static void merge_all_result(const int in_out_result)
 	}
 	else if(lpr_in_out > 0)
 	{
+		if(send_count == 0 && lpr_in_out == 2)
+		{
+			return;
+		}
+		if(send_count >= 1 && result_bbox.bbox_num == 1)
+		{
+			return;
+		}
 		if(lpr_result != "" && lpr_confidence > 0)
 		{
 			network_process.send_result(lpr_result, lpr_in_out);
-			send_count = 1;
+			lpr_result = "";
 			lpr_confidence = 0;
+			send_count = 1;
 		}
 		else if(has_car > 0 && lpr_in_out == 1)
 		{
 			network_process.send_result("001", 3);
+			send_count = 1;
 		}
 		else if(has_car > 0 && lpr_in_out == 2)
 		{
 			network_process.send_result("001", 4);
 		}
-		if(final_result == 2)
+
+		if(lpr_in_out == 2)
 		{
 			send_count = 0;
 		}
 	}
 
-	list_has_lpr.clear();
-	list_lpr_bbox.clear();
-	list_has_car.clear();
+	list_has_lpr.bbox_num = 0;
+	list_lpr_bbox.bbox_num = 0;
+	list_has_car.bbox_num = 0;
 }
 
-// static void *run_lpr_pthread(void *param_thread)
-// {
-// 	int rval;
-// 	lpr_thread_params_t *lpr_param =
-// 		(lpr_thread_params_t*)param_thread;
-// 	global_control_param_t *G_param = lpr_param->G_param;
-// 	LPR_ctx_t LPR_ctx;
-
-// 	// Detection result param
-// 	bbox_param_t bbox_param[MAX_DETECTED_LICENSE_NUM];
-// 	draw_plate_list_t draw_plate_list;
-// 	uint16_t license_num = 0;
-// 	license_list_t license_result;
-// 	state_buffer_t *ssd_mid_buf;
-// 	ea_img_resource_data_t * data = NULL;
-// 	ea_tensor_t *img_tensor = NULL;
-
-// 	// Time mesurement
-// 	uint64_t start_time = 0;
-// 	uint64_t debug_time = 0;
-// 	float sum_time = 0.0f;
-// 	float average_license_num = 0.0f;
-// 	uint32_t loop_count = 1;
-// 	uint32_t debug_en = G_param->debug_en;
-
-// 	prctl(PR_SET_NAME, "lpr_pthread");
-
-// 	do {
-// 		memset(&LPR_ctx, 0, sizeof(LPR_ctx));
-// 		memset(&draw_plate_list, 0, sizeof(draw_plate_list));
-// 		memset(&bbox_param, 0, sizeof(bbox_param));
-
-// 		LPR_ctx.img_h = lpr_param->height;
-// 		LPR_ctx.img_w = lpr_param->width;
-// 		RVAL_OK(init_LPR(&LPR_ctx, G_param));
-// 		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
-
-// 		while (run_flag) {
-// #if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
-// 			while(run_lpr > 0)
-// #endif
-// 			{
-// 				if(lpr_critical_resource(&license_num, bbox_param, ssd_mid_buf, G_param) < 0)
-// 					continue;
-// 				start_time = gettimeus();
-// 				data = (ea_img_resource_data_t *)ssd_mid_buf->img_resource_addr;
-// 				if (license_num == 0) {
-// #if defined(OFFLINE_DATA)
-// 					for (int i = 0; i < data->tensor_num; i++) {
-// 						if (data->tensor_group[i]) {
-// 							ea_tensor_free(data->tensor_group[i]);
-// 							data->tensor_group[i] = NULL;
-// 						}
-// 					}
-// 					free(data->tensor_group);
-// 					data->tensor_group = NULL;
-// 					data->led_group = NULL;
-// #else
-// 					RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
-// #endif
-// 					continue;
-// 				}
-// 				img_tensor = data->tensor_group[DEFAULT_LPR_LAYER_ID];
-// 				if (G_param->abort_if_preempted) {
-// 					pthread_mutex_lock(&G_param->vp_access_lock);
-// 				}
-// 				RVAL_OK(LPR_run_vp_preprocess(&LPR_ctx, img_tensor, license_num, (void*)bbox_param));
-// 				if (G_param->abort_if_preempted) {
-// 					pthread_mutex_unlock(&G_param->vp_access_lock); // unlock to let SSD run during LPR ARM time
-// 				}
-
-// 				RVAL_OK(LPR_run_arm_preprocess(&LPR_ctx, license_num));
-// 				if (G_param->abort_if_preempted) {
-// 					pthread_mutex_lock(&G_param->vp_access_lock);
-// 				}
-// 				RVAL_OK(LPR_run_vp_recognition(&LPR_ctx, license_num, &license_result));
-// #ifdef IS_SHOW
-// 				draw_overlay_preprocess(&draw_plate_list, &license_result, bbox_param, G_param);
-// 				TIME_MEASURE_START(debug_en);
-// 				RVAL_OK(set_overlay_image(img_tensor, &draw_plate_list));
-// 				TIME_MEASURE_END("[LPR] LPR draw overlay time", debug_en);
-// #endif
-// 				if (G_param->abort_if_preempted) {
-// 					pthread_mutex_unlock(&G_param->vp_access_lock);
-// 				}
-
-// 				if(license_result.license_num > 0)
-// 				{
-// 					pthread_mutex_lock(&result_mutex);
-// 					bbox_param_t lpr_bbox = {0};
-// 					lpr_bbox.norm_min_x = bbox_param[0].norm_min_x * LPR_ctx.img_w;
-// 					lpr_bbox.norm_min_y = bbox_param[0].norm_min_y * LPR_ctx.img_h;
-// 					lpr_bbox.norm_max_x = bbox_param[0].norm_max_x * LPR_ctx.img_w;
-// 					lpr_bbox.norm_max_y = bbox_param[0].norm_max_y * LPR_ctx.img_h;
-
-// #if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
-// 					list_lpr_bbox.push_back(lpr_bbox);
-// #endif
-
-// 					LOG(INFO) << "lpr bbox: " << lpr_bbox.norm_min_x << " " \
-// 					<< lpr_bbox.norm_min_y << " " \
-// 				    << lpr_bbox.norm_max_x << " " \
-// 					<< lpr_bbox.norm_max_y;
-					
-// 					LOG(INFO) << "LPR:"  << license_result.license_info[0].text << " " << license_result.license_info[0].conf;
-// 					if (license_result.license_info[0].conf > DEFAULT_LPR_CONF_THRES && \
-// 						strlen(license_result.license_info[0].text) == CHINESE_LICENSE_STR_LEN && \
-// 						license_result.license_info[0].conf > lpr_confidence)
-// 						{
-// 							lpr_result = license_result.license_info[0].text;
-// 							lpr_confidence = license_result.license_info[0].conf;
-// 							LOG(WARNING) << "LPR:"  << lpr_result << " " << lpr_confidence;
-// 						}
-// 					pthread_mutex_unlock(&result_mutex);
-// 				}
-// 				else
-// 				{
-
-// 				}
-
-// #if defined(OFFLINE_DATA)
-// 				for (int i = 0; i < data->tensor_num; i++) {
-// 					if (data->tensor_group[i]) {
-// 						ea_tensor_free(data->tensor_group[i]);
-// 						data->tensor_group[i] = NULL;
-// 					}
-// 				}
-// 				free(data->tensor_group);
-// 				data->tensor_group = NULL;
-// 				data->led_group = NULL;
-// #else
-// 				RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
-// #endif
-// 				sum_time += (gettimeus() - start_time);
-// 				++loop_count;
-// 				average_license_num += license_num;
-// 				if (loop_count == TIME_MEASURE_LOOPS) {
-// 					float average_time1 = sum_time / (1000 * TIME_MEASURE_LOOPS);
-// 					float average_time2 = (average_license_num > 0.0f) ? (sum_time / (1000 * average_license_num)) : 0.0f;
-// 					LOG(INFO) << "[" << TIME_MEASURE_LOOPS  << "loops] LPR average time license_num " << " " << average_license_num / TIME_MEASURE_LOOPS;
-// 					LOG(WARNING) << "LPR average time:"<< average_time1 << " per license cost time:" << average_time2;
-// 					sum_time = 0;
-// 					loop_count = 1;
-// 					average_license_num = license_num;
-// 				}
-// 			}
-// 			usleep(20000);
-// 		}
-// 	} while (0);
-// 	do {
-// 		run_flag = 0;
-// 		free_single_state_buffer(ssd_mid_buf);
-// 		LPR_deinit(&LPR_ctx);
-// 		LOG(WARNING) << "LPR thread quit.";
-// 	} while (0);
-
-// 	return NULL;
-// }
-
+#if defined(OLD_CODE)
 static void *run_lpr_pthread(void *param_thread)
 {
 	int rval;
 	lpr_thread_params_t *lpr_param =
 		(lpr_thread_params_t*)param_thread;
 	global_control_param_t *G_param = lpr_param->G_param;
-
-	RecNet rec_net;
+	LPR_ctx_t LPR_ctx;
 
 	// Detection result param
 	bbox_param_t bbox_param[MAX_DETECTED_LICENSE_NUM];
@@ -460,19 +314,20 @@ static void *run_lpr_pthread(void *param_thread)
 	uint32_t loop_count = 1;
 	uint32_t debug_en = G_param->debug_en;
 
-	cv::Mat bgr(lpr_param->height * 2 / 3, lpr_param->width, CV_8UC3);
-	std::vector<cv::Mat> imgs;
-	std::vector<cv::Point> polygon;
-	float char_score = 0;
+	list_lpr_bbox.bbox_num = 0;
+
+	std::cout << "lpr size:" << lpr_param->width << " " << lpr_param->height << " " << lpr_param->pitch << std::endl;
 
 	prctl(PR_SET_NAME, "lpr_pthread");
 
 	do {
-		memset(&license_result, 0, sizeof(license_list_t));
-		memset(&draw_plate_list, 0, sizeof(draw_plate_list_t));
+		memset(&LPR_ctx, 0, sizeof(LPR_ctx));
+		memset(&draw_plate_list, 0, sizeof(draw_plate_list));
 		memset(&bbox_param, 0, sizeof(bbox_param));
 
-		RVAL_ASSERT(rec_net.initModel("/data/lpr/mbv3_lstm.bin"));
+		LPR_ctx.img_h = lpr_param->height;
+		LPR_ctx.img_w = lpr_param->width;
+		RVAL_OK(init_LPR(&LPR_ctx, G_param));
 		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
 
 		while (run_flag) {
@@ -501,78 +356,66 @@ static void *run_lpr_pthread(void *param_thread)
 					continue;
 				}
 				img_tensor = data->tensor_group[DEFAULT_LPR_LAYER_ID];
-				RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
-				imgs.clear();
-				polygon.clear();
-				polygon.push_back(cv::Point(static_cast<int>(bbox_param[0].p3_x*bgr.cols), \ 
-				                            static_cast<int>(bbox_param[0].p3_y*bgr.rows)));
-				polygon.push_back(cv::Point(static_cast<int>(bbox_param[0].p4_x*bgr.cols), \ 
-				                            static_cast<int>(bbox_param[0].p4_y*bgr.rows)));
-				polygon.push_back(cv::Point(static_cast<int>(bbox_param[0].p1_x*bgr.cols), \ 
-				                            static_cast<int>(bbox_param[0].p1_y*bgr.rows)));
-				polygon.push_back(cv::Point(static_cast<int>(bbox_param[0].p2_x*bgr.cols), \ 
-				                            static_cast<int>(bbox_param[0].p2_y*bgr.rows)));
-				cv::Mat roi = rec_net.cropImageROI(bgr, polygon);
-				imgs.push_back(roi);
-				// save_process.save_image(roi, start_time);
-				std::vector<TextLine> textLines = rec_net.getTextLines(imgs);
-				license_result.license_num = 0;
-				char_score = 0;
-				for (int i = 0; i < textLines.size(); i++)
-				{
-					TextLine text = textLines[i];
-					for (int j = 0; j < text.charScores.size(); j++)
-					{
-						char_score += text.charScores[j];
-					}
-
-					memset(license_result.license_info[i].text, 0, sizeof(license_result.license_info[i].text));
-					snprintf(license_result.license_info[i].text, sizeof(license_result.license_info[i].text),
-						"%s", text.text.c_str());
-					license_result.license_info[i].conf = char_score / text.charScores.size();
-					++license_result.license_num;
+				if (G_param->abort_if_preempted) {
+					pthread_mutex_lock(&G_param->vp_access_lock);
 				}
-				
+				RVAL_OK(LPR_run_vp_preprocess(&LPR_ctx, img_tensor, license_num, (void*)bbox_param));
+				if (G_param->abort_if_preempted) {
+					pthread_mutex_unlock(&G_param->vp_access_lock); // unlock to let SSD run during LPR ARM time
+				}
+
+				RVAL_OK(LPR_run_arm_preprocess(&LPR_ctx, license_num));
+				if (G_param->abort_if_preempted) {
+					pthread_mutex_lock(&G_param->vp_access_lock);
+				}
+				RVAL_OK(LPR_run_vp_recognition(&LPR_ctx, license_num, &license_result));
 #ifdef IS_SHOW
-				draw_overlay_preprocess(&draw_plate_list, &license_result, bbox_param, G_param);
+				draw_overlay_preprocess(&draw_plate_list, &license_result, bbox_param, debug_en);
 				TIME_MEASURE_START(debug_en);
 				RVAL_OK(set_overlay_image(img_tensor, &draw_plate_list));
 				TIME_MEASURE_END("[LPR] LPR draw overlay time", debug_en);
 #endif
+				if (G_param->abort_if_preempted) {
+					pthread_mutex_unlock(&G_param->vp_access_lock);
+				}
 
 				if(license_result.license_num > 0)
 				{
-					pthread_mutex_lock(&result_mutex);
-					bbox_param_t lpr_bbox = {0};
-					lpr_bbox.norm_min_x = bbox_param[0].norm_min_x * lpr_param->width;
-					lpr_bbox.norm_min_y = bbox_param[0].norm_min_y * lpr_param->height;
-					lpr_bbox.norm_max_x = bbox_param[0].norm_max_x * lpr_param->width;
-					lpr_bbox.norm_max_y = bbox_param[0].norm_max_y * lpr_param->height;
-
-#if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
-					list_lpr_bbox.push_back(lpr_bbox);
-#endif
-
-					LOG(INFO) << "lpr bbox: " << lpr_bbox.norm_min_x << " " \
-					<< lpr_bbox.norm_min_y << " " \
-				    << lpr_bbox.norm_max_x << " " \
-					<< lpr_bbox.norm_max_y;
-					
-					LOG(INFO) << "LPR:"  << license_result.license_info[0].text << " " << license_result.license_info[0].conf;
+					size_t char_len = strlen(license_result.license_info[0].text);
+					LOG(INFO) << "LPR:"  << license_result.license_info[0].text << " " \
+								<< license_result.license_info[0].conf << " "
+								<< char_len;
 					if (license_result.license_info[0].conf > DEFAULT_LPR_CONF_THRES && \
-						license_result.license_info[0].conf > lpr_confidence)
+						(char_len == 9 || char_len == 10))
 						{
-							lpr_result = license_result.license_info[0].text;
-							lpr_confidence = license_result.license_info[0].conf;
-							LOG(WARNING) << "LPR:"  << lpr_result << " " << lpr_confidence;
+							pthread_mutex_lock(&result_mutex);
+							if(license_result.license_info[0].conf > lpr_confidence)
+							{
+								lpr_result = license_result.license_info[0].text;
+								lpr_confidence = license_result.license_info[0].conf;
+								LOG(WARNING) << "LPR:"  << lpr_result << " " << lpr_confidence;
+							}
+							bbox_param_t lpr_bbox = {0};
+							lpr_bbox.norm_min_x = bbox_param[0].norm_min_x * lpr_param->width;
+							lpr_bbox.norm_min_y = bbox_param[0].norm_min_y * lpr_param->height;
+							lpr_bbox.norm_max_x = bbox_param[0].norm_max_x * lpr_param->width;
+							lpr_bbox.norm_max_y = bbox_param[0].norm_max_y * lpr_param->height;
+							if(list_lpr_bbox.bbox_num < MAX_OVERLAY_PLATE_NUM)
+							{
+								list_lpr_bbox.bbox[list_lpr_bbox.bbox_num++] = lpr_bbox;
+							}
+							else
+							{
+								LOG(INFO) << "not add lpr bbox";
+							}
+							LOG(INFO) << "LPR bbox: " << lpr_bbox.norm_min_x << " " \
+														<< lpr_bbox.norm_min_y << " " \
+														<< lpr_bbox.norm_max_x << " " \
+														<< lpr_bbox.norm_max_y;
+							pthread_mutex_unlock(&result_mutex);
 						}
-					pthread_mutex_unlock(&result_mutex);
 				}
-				else
-				{
-
-				}
-
+				
 #if defined(OFFLINE_DATA)
 				for (int i = 0; i < data->tensor_num; i++) {
 					if (data->tensor_group[i]) {
@@ -600,6 +443,9 @@ static void *run_lpr_pthread(void *param_thread)
 				}
 			}
 #if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
+			lpr_result = "";
+			lpr_confidence = 0;
+			list_lpr_bbox.bbox_num = 0;
 			usleep(20000);
 #endif
 		}
@@ -607,6 +453,7 @@ static void *run_lpr_pthread(void *param_thread)
 	do {
 		run_flag = 0;
 		free_single_state_buffer(ssd_mid_buf);
+		LPR_deinit(&LPR_ctx);
 		LOG(WARNING) << "LPR thread quit.";
 	} while (0);
 
@@ -628,15 +475,10 @@ static void *run_det_lpr_pthread(void *thread_params)
 		(lpr_thread_params_t*)thread_params;
 	global_control_param_t *G_param = det_lpr_param->G_param;
 	// SSD param
-	// SSD_ctx_t SSD_ctx;
-	// ssd_net_final_result_t ssd_net_result;
-	// int ssd_result_num = 0;
-	// bbox_param_t scaled_license_plate;
-
-	// YOLOV5 param
-	yolov5_t yolov5_ctx;
-	landmark_yolov5_result_s yolov5_net_result;
-	int license_box_num = 0;
+	SSD_ctx_t SSD_ctx;
+	ssd_net_final_result_t ssd_net_result;
+	int ssd_result_num = 0;
+	bbox_param_t scaled_license_plate;
 
 	state_buffer_t *ssd_mid_buf;
 	bbox_list_t bbox_list = {0};
@@ -653,6 +495,9 @@ static void *run_det_lpr_pthread(void *thread_params)
 	uint32_t loop_count = 1;
 	uint32_t debug_en = G_param->debug_en;
 
+	uint32_t list_index = 0;
+	list_has_lpr.bbox_num = 0;
+
 #if defined(OFFLINE_DATA)
 	ea_tensor_t **tensors = NULL;
 	int tensor_num;
@@ -660,25 +505,22 @@ static void *run_det_lpr_pthread(void *thread_params)
 	// void *yuv_data = ea_tensor_data_for_read(dst, EA_CPU);
 #endif
 
+	std::cout << "det_lpr size:" << det_lpr_param->width << " " << det_lpr_param->height << " " << det_lpr_param->pitch << std::endl;
 
-	prctl(PR_SET_NAME, "ssd_pthread");
+	prctl(PR_SET_NAME, "det_lpr_pthread");
 
 	do {
 		memset(&data, 0, sizeof(data));
 		memset(&bbox_list, 0, sizeof(bbox_list_t));
 
-		// memset(&SSD_ctx, 0, sizeof(SSD_ctx_t));
-		// memset(&ssd_net_result, 0, sizeof(ssd_net_result));
-		// memset(&scaled_license_plate, 0, sizeof(scaled_license_plate));
-		// RVAL_OK(init_ssd(&SSD_ctx, G_param, det_lpr_param->height, det_lpr_param->width));
-		// ssd_net_result.dproc_ssd_result = (dproc_ssd_detection_output_result_t *)
-		// 	malloc(SSD_ctx.vp_result_info.max_dproc_ssd_result_num *
-		// 	sizeof(dproc_ssd_detection_output_result_t));
-		// RVAL_ASSERT(ssd_net_result.dproc_ssd_result != NULL);
-
-		memset(&yolov5_ctx, 0, sizeof(yolov5_t));
-		memset(&yolov5_net_result, 0, sizeof(landmark_yolov5_result_s));
-		RVAL_OK(init_yolov5(&yolov5_ctx, G_param));
+		memset(&SSD_ctx, 0, sizeof(SSD_ctx_t));
+		memset(&ssd_net_result, 0, sizeof(ssd_net_result));
+		memset(&scaled_license_plate, 0, sizeof(scaled_license_plate));
+		RVAL_OK(init_ssd(&SSD_ctx, G_param, det_lpr_param->height, det_lpr_param->width));
+		ssd_net_result.dproc_ssd_result = (dproc_ssd_detection_output_result_t *)
+			malloc(SSD_ctx.vp_result_info.max_dproc_ssd_result_num *
+			sizeof(dproc_ssd_detection_output_result_t));
+		RVAL_ASSERT(ssd_net_result.dproc_ssd_result != NULL);
 
 		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
  
@@ -736,137 +578,88 @@ static void *run_det_lpr_pthread(void *thread_params)
 
 				TIME_MEASURE_START(debug_en);
 				// std::cout << "det_lpr size:" << ea_tensor_shape(SSD_ctx.net_input.tensor)[2] << " " << ea_tensor_shape(SSD_ctx.net_input.tensor)[3] << " " << ea_tensor_pitch(SSD_ctx.net_input.tensor) << std::endl;
-				// RVAL_OK(ea_cvt_color_resize(img_tensor, SSD_ctx.net_input.tensor, EA_COLOR_YUV2BGR_NV12, EA_VP));
-				RVAL_OK(ea_cvt_color_resize(img_tensor, yolov5_input(&yolov5_ctx), EA_COLOR_YUV2BGR_NV12, EA_VP));
+				RVAL_OK(ea_cvt_color_resize(img_tensor, SSD_ctx.net_input.tensor, EA_COLOR_YUV2BGR_NV12, EA_VP));
 				TIME_MEASURE_END("[det_lpr] preprocess time", debug_en);
 
 				TIME_MEASURE_START(debug_en);
-				// if (G_param->abort_if_preempted) {
-				// 	wait_vp_available(&G_param->vp_access_lock);
-				// }
-				// rval = ssd_net_run_vp_forward(&SSD_ctx.ssd_net_ctx);
-				rval = yolov5_vp_forward(&yolov5_ctx);
-				// if (rval < 0) {
-				// 	if (rval == -EAGAIN) {
-				// 		do {
-				// 			if (G_param->abort_if_preempted) {
-				// 				wait_vp_available(&G_param->vp_access_lock);
-				// 			}
-				// 			rval = ea_net_resume(yolov5_ctx.net);
-				// 			if (rval == -EINTR) {
-				// 				printf("det_lpr network interrupt by signal in resume\n");
-				// 				break;
-				// 			}
-				// 		} while (rval == -EAGAIN);
-				// 	} else if (rval == -EINTR) {
-				// 		printf("det_lpr network interrupt by signal in run\n");
-				// 		break;
-				// 	} else {
-				// 		printf("ssd_net_run_vp_forward failed, ret: %d\n", rval);
-				// 		rval = -1;
-				// 		break;
-				// 	}
-				// }
+				if (G_param->abort_if_preempted) {
+					wait_vp_available(&G_param->vp_access_lock);
+				}
+				rval = ssd_net_run_vp_forward(&SSD_ctx.ssd_net_ctx);
+				if (rval < 0) {
+					if (rval == -EAGAIN) {
+						do {
+							if (G_param->abort_if_preempted) {
+								wait_vp_available(&G_param->vp_access_lock);
+							}
+							rval = ea_net_resume(SSD_ctx.ssd_net_ctx.net);
+							if (rval == -EINTR) {
+								printf("det_lpr network interrupt by signal in resume\n");
+								break;
+							}
+						} while (rval == -EAGAIN);
+					} else if (rval == -EINTR) {
+						printf("det_lpr network interrupt by signal in run\n");
+						break;
+					} else {
+						printf("ssd_net_run_vp_forward failed, ret: %d\n", rval);
+						rval = -1;
+						break;
+					}
+				}
 			
-				// ea_tensor_sync_cache(SSD_ctx.ssd_net_ctx.output_loc_tensor, EA_VP, EA_CPU);
-				// ea_tensor_sync_cache(SSD_ctx.ssd_net_ctx.output_conf_tensor, EA_VP, EA_CPU);
+				ea_tensor_sync_cache(SSD_ctx.ssd_net_ctx.output_loc_tensor, EA_VP, EA_CPU);
+				ea_tensor_sync_cache(SSD_ctx.ssd_net_ctx.output_conf_tensor, EA_VP, EA_CPU);
 				TIME_MEASURE_END("[det_lpr] network time", debug_en);
 
 				TIME_MEASURE_START(debug_en);
-				// ssd_net_result.ssd_det_num = 0;
-				// memset(&ssd_net_result.labels[0][0], 0,
-				// 	SSD_NET_MAX_LABEL_NUM * SSD_NET_MAX_LABEL_LEN);
-				// memset(ssd_net_result.dproc_ssd_result, 0,
-				// 	SSD_ctx.vp_result_info.max_dproc_ssd_result_num *
-				// 	sizeof(dproc_ssd_detection_output_result_t));
-				// RVAL_OK(ssd_net_run_arm_nms(&SSD_ctx.ssd_net_ctx,
-				// 	SSD_ctx.vp_result_info.loc_dram_addr,
-				// 	SSD_ctx.vp_result_info.conf_dram_addr, &ssd_net_result));
-				
-				yolov5_net_result.valid_det_count = 0;
-				RVAL_OK(landmark_yolov5_arm_post_process(&yolov5_ctx, &yolov5_net_result));
-				TIME_MEASURE_END("[det_lpr] ARM NMS time", debug_en);
+				ssd_net_result.ssd_det_num = 0;
+				memset(&ssd_net_result.labels[0][0], 0,
+					SSD_NET_MAX_LABEL_NUM * SSD_NET_MAX_LABEL_LEN);
+				memset(ssd_net_result.dproc_ssd_result, 0,
+					SSD_ctx.vp_result_info.max_dproc_ssd_result_num *
+					sizeof(dproc_ssd_detection_output_result_t));
+				RVAL_OK(ssd_net_run_arm_nms(&SSD_ctx.ssd_net_ctx,
+					SSD_ctx.vp_result_info.loc_dram_addr,
+					SSD_ctx.vp_result_info.conf_dram_addr, &ssd_net_result));
 
 				TIME_MEASURE_START(debug_en);
-				// ssd_result_num = min(ssd_net_result.ssd_det_num, MAX_DETECTED_LICENSE_NUM);
-				// bbox_list.bbox_num = min(ssd_result_num, MAX_OVERLAY_PLATE_NUM);
-				// ssd_critical_resource(ssd_net_result.dproc_ssd_result, &data,
-				// 	bbox_list.bbox_num, ssd_mid_buf, G_param);
+				ssd_result_num = min(ssd_net_result.ssd_det_num, MAX_DETECTED_LICENSE_NUM);
+				bbox_list.bbox_num = min(ssd_result_num, MAX_OVERLAY_PLATE_NUM);
+				ssd_critical_resource(ssd_net_result.dproc_ssd_result, &data,
+					bbox_list.bbox_num, ssd_mid_buf, G_param);
 
-				license_box_num = min(yolov5_net_result.valid_det_count, MAX_DETECTED_LICENSE_NUM);
-				bbox_list.bbox_num = min(license_box_num, MAX_OVERLAY_PLATE_NUM);
-				yolov5_critical_resource(yolov5_net_result.detections, &data, bbox_list.bbox_num, ssd_mid_buf, G_param);
-
+				pthread_mutex_lock(&result_mutex);
 				if(bbox_list.bbox_num > 0)
 				{
 					has_lpr = 1;
-#if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
-					pthread_mutex_lock(&result_mutex);
-					list_has_lpr.push_back(1);
-					pthread_mutex_unlock(&result_mutex);
-#endif
 				}
 				else
 				{
-#if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
-					pthread_mutex_lock(&result_mutex);
-					list_has_lpr.push_back(0);
-					pthread_mutex_unlock(&result_mutex);
-#endif 
+					has_lpr = 0;
 				}
+				if(list_has_lpr.bbox_num < MAX_OVERLAY_PLATE_NUM)
+					list_has_lpr.bbox_num++;
+				list_has_lpr.has[list_index++] = has_lpr;
+				list_index = list_index % MAX_OVERLAY_PLATE_NUM;
+				pthread_mutex_unlock(&result_mutex);
 				LOG(WARNING) << "lpr box count:" << bbox_list.bbox_num;
 
 				TIME_MEASURE_END("[det_lpr] post-process time", debug_en);
 
 #ifdef IS_SHOW
-				// for (int i = 0; i < bbox_list.bbox_num; ++i) {
-				// 	upscale_normalized_rectangle(ssd_net_result.dproc_ssd_result[i].bbox.x_min,
-				// 	ssd_net_result.dproc_ssd_result[i].bbox.y_min,
-				// 	ssd_net_result.dproc_ssd_result[i].bbox.x_max,
-				// 	ssd_net_result.dproc_ssd_result[i].bbox.y_max,
-				// 	DRAW_LICNESE_UPSCALE_W, DRAW_LICNESE_UPSCALE_H, &scaled_license_plate);
-				// 	bbox_list.bbox[i].norm_min_x = scaled_license_plate.norm_min_x;
-				// 	bbox_list.bbox[i].norm_min_y = scaled_license_plate.norm_min_y;
-				// 	bbox_list.bbox[i].norm_max_x = scaled_license_plate.norm_max_x;
-				// 	bbox_list.bbox[i].norm_max_y = scaled_license_plate.norm_max_y;
-
-				// 	LOG(INFO) << "lpr :" << ssd_net_result.dproc_ssd_result[i].bbox.x_min << " " << ssd_net_result.dproc_ssd_result[i].bbox.y_min << " " << bbox_list.bbox[i].norm_max_x << " " << bbox_list.bbox[i].norm_max_y;
-				// }
-
 				for (int i = 0; i < bbox_list.bbox_num; ++i) {
-					bbox_list.bbox[i].norm_min_x = yolov5_net_result.detections[i].x_start;
-					bbox_list.bbox[i].norm_min_y = yolov5_net_result.detections[i].y_start;
-					bbox_list.bbox[i].norm_max_x = yolov5_net_result.detections[i].x_end;
-					bbox_list.bbox[i].norm_max_y = yolov5_net_result.detections[i].y_end;
-					if(yolov5_net_result.detections[i].p1_x > yolov5_net_result.detections[i].p2_x && \
-						yolov5_net_result.detections[i].p4_x > yolov5_net_result.detections[i].p3_x)
-					{
-						bbox_list.bbox[i].p1_x = yolov5_net_result.detections[i].p1_x;
-						bbox_list.bbox[i].p1_y = yolov5_net_result.detections[i].p1_y;
-						bbox_list.bbox[i].p2_x = yolov5_net_result.detections[i].p2_x;
-						bbox_list.bbox[i].p2_y = yolov5_net_result.detections[i].p2_y;
-						bbox_list.bbox[i].p3_x = yolov5_net_result.detections[i].p3_x;
-						bbox_list.bbox[i].p3_y = yolov5_net_result.detections[i].p3_y;
-						bbox_list.bbox[i].p4_x = yolov5_net_result.detections[i].p4_x;
-						bbox_list.bbox[i].p4_y = yolov5_net_result.detections[i].p4_y;
-					}
-					else
-					{
-						bbox_list.bbox[i].p1_x = yolov5_net_result.detections[i].p2_x;
-						bbox_list.bbox[i].p1_y = yolov5_net_result.detections[i].p2_y;
-						bbox_list.bbox[i].p2_x = yolov5_net_result.detections[i].p1_x;
-						bbox_list.bbox[i].p2_y = yolov5_net_result.detections[i].p1_y;
-						bbox_list.bbox[i].p3_x = yolov5_net_result.detections[i].p4_x;
-						bbox_list.bbox[i].p3_y = yolov5_net_result.detections[i].p4_y;
-						bbox_list.bbox[i].p4_x = yolov5_net_result.detections[i].p3_x;
-						bbox_list.bbox[i].p4_y = yolov5_net_result.detections[i].p3_y;
-					}
-
-
-					LOG(INFO) << "lpr norm box:" << yolov5_net_result.detections[i].x_start << " " << \
-					                                yolov5_net_result.detections[i].y_start << " " << \
-										            yolov5_net_result.detections[i].x_end << " " << \
-										            yolov5_net_result.detections[i].y_end;
+					upscale_normalized_rectangle(ssd_net_result.dproc_ssd_result[i].bbox.x_min,
+					ssd_net_result.dproc_ssd_result[i].bbox.y_min,
+					ssd_net_result.dproc_ssd_result[i].bbox.x_max,
+					ssd_net_result.dproc_ssd_result[i].bbox.y_max,
+					DRAW_LICNESE_UPSCALE_W, DRAW_LICNESE_UPSCALE_H, &scaled_license_plate);
+					bbox_list.bbox[i].norm_min_x = scaled_license_plate.norm_min_x;
+					bbox_list.bbox[i].norm_min_y = scaled_license_plate.norm_min_y;
+					bbox_list.bbox[i].norm_max_x = scaled_license_plate.norm_max_x;
+					bbox_list.bbox[i].norm_max_y = scaled_license_plate.norm_max_y;
+					bbox_list.bbox[i].score = ssd_net_result.dproc_ssd_result[i].score;
+					LOG(INFO) << "lpr :" << ssd_net_result.dproc_ssd_result[i].bbox.x_min << " " << ssd_net_result.dproc_ssd_result[i].bbox.y_min << " " << bbox_list.bbox[i].norm_max_x << " " << bbox_list.bbox[i].norm_max_y;
 				}
 
 				RVAL_OK(set_overlay_bbox(&bbox_list));
@@ -894,16 +687,437 @@ static void *run_det_lpr_pthread(void *thread_params)
 			TIME_MEASURE_END("[det_lpr] get yuv cost time", 1);
 #elif defined(IS_PC_RUN) && defined(IS_LPR_RUN)
             has_lpr = 0;
+			list_index = 0;
+			list_has_lpr.bbox_num = 0;
 			usleep(20000);
 #endif
 		}
 	} while (0);
 	do {
 		run_flag = 0;
-		// if (ssd_net_result.dproc_ssd_result != NULL) {
-		// 	free(ssd_net_result.dproc_ssd_result);
-		// }
-		// ssd_net_deinit(&SSD_ctx.ssd_net_ctx);
+		if (ssd_net_result.dproc_ssd_result != NULL) {
+			free(ssd_net_result.dproc_ssd_result);
+		}
+		ssd_net_deinit(&SSD_ctx.ssd_net_ctx);
+		free_single_state_buffer(ssd_mid_buf);
+		LOG(WARNING) << "det_lpr thread quit.";
+	} while (0);
+
+	return NULL;
+}
+
+#else
+
+static void *run_lpr_pthread(void *param_thread)
+{
+	int rval;
+	unsigned long long int frame_number = 0;
+	lpr_thread_params_t *lpr_param =
+		(lpr_thread_params_t*)param_thread;
+	global_control_param_t *G_param = lpr_param->G_param;
+	uint32_t debug_en = G_param->debug_en;
+
+	RecNet rec_net;
+
+	// Detection result param
+	bbox_param_t bbox_param[MAX_DETECTED_LICENSE_NUM];
+	draw_plate_list_t draw_plate_list;
+	uint16_t license_num = 0;
+	license_list_t license_result;
+	state_buffer_t *ssd_mid_buf;
+	ea_img_resource_data_t * data = NULL;
+	ea_tensor_t *img_tensor = NULL;
+
+	// Time mesurement
+	uint64_t start_time = 0;
+	uint64_t debug_time = 0;
+	float sum_time = 0.0f;
+	float average_license_num = 0.0f;
+	uint32_t loop_count = 1;
+	
+	cv::Mat bgr;
+	std::vector<cv::Point2f> polygon;
+	float char_score = 0;
+
+	list_lpr_bbox.bbox_num = 0;
+
+	std::cout << "lpr size:" << lpr_param->width << " " << lpr_param->height << " " << lpr_param->pitch << std::endl;
+
+	prctl(PR_SET_NAME, "lpr_pthread");
+
+	do {
+		memset(&license_result, 0, sizeof(license_list_t));
+		memset(&draw_plate_list, 0, sizeof(draw_plate_list_t));
+		memset(&bbox_param, 0, sizeof(bbox_param));
+
+		RVAL_ASSERT(rec_net.initModel("/data/lpr/mbv3_lstm.bin"));
+		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
+
+		while (run_flag) {
+#if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
+			while(run_lpr > 0)
+#endif
+			{
+				if(lpr_critical_resource(&license_num, bbox_param, ssd_mid_buf, G_param) < 0)
+					continue;
+				start_time = gettimeus();
+				data = (ea_img_resource_data_t *)ssd_mid_buf->img_resource_addr;
+				if (license_num == 0) {
+#if defined(OFFLINE_DATA)
+					for (int i = 0; i < data->tensor_num; i++) {
+						if (data->tensor_group[i]) {
+							ea_tensor_free(data->tensor_group[i]);
+							data->tensor_group[i] = NULL;
+						}
+					}
+					free(data->tensor_group);
+					data->tensor_group = NULL;
+					data->led_group = NULL;
+#else
+					RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
+#endif
+					continue;
+				}
+				img_tensor = data->tensor_group[DEFAULT_LPR_LAYER_ID];
+				// std::stringstream filename_image;
+                // filename_image << "/data/save_data/" << "image_" << frame_number << ".jpg";
+				// RVAL_OK(ea_tensor_to_jpeg(img_tensor, EA_TENSOR_COLOR_MODE_YUV_NV12, filename_image.str().c_str()));
+				// frame_number++;
+				TIME_MEASURE_START(debug_en);
+				RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
+				// save_process.save_image(bgr, start_time);
+				TIME_MEASURE_END("[LPR] LPR cvt bgr cost time", debug_en);
+
+				TIME_MEASURE_START(debug_en);
+				polygon.clear();
+				polygon.push_back(cv::Point2f(bbox_param[0].p3_x*bgr.cols, \ 
+				                            bbox_param[0].p3_y*bgr.rows));
+				polygon.push_back(cv::Point2f(bbox_param[0].p4_x*bgr.cols, \ 
+				                            bbox_param[0].p4_y*bgr.rows));
+				polygon.push_back(cv::Point2f(bbox_param[0].p1_x*bgr.cols, \ 
+				                            bbox_param[0].p1_y*bgr.rows));
+				polygon.push_back(cv::Point2f(bbox_param[0].p2_x*bgr.cols, \ 
+				                            bbox_param[0].p2_y*bgr.rows));
+				cv::Mat roi = rec_net.cropImageROI(bgr, polygon);
+				TIME_MEASURE_END("[LPR] LPR crop roi cost time", debug_en);
+				save_process.save_image(roi, start_time);
+
+				TIME_MEASURE_START(debug_en);
+				TextLine textLine = rec_net.getTextLine(roi);
+				license_result.license_num = 0;
+				char_score = 0;
+				for (int j = 0; j < textLine.charScores.size(); j++)
+				{
+					char_score += textLine.charScores[j];
+				}
+				memset(license_result.license_info[0].text, 0, sizeof(license_result.license_info[0].text));
+				snprintf(license_result.license_info[0].text, sizeof(license_result.license_info[0].text),
+					"%s", textLine.text.c_str());
+				license_result.license_info[0].conf = char_score / textLine.charScores.size();
+				++license_result.license_num;
+
+				TIME_MEASURE_END("[LPR] LPR network cost time", debug_en);
+				
+#ifdef IS_SHOW
+				TIME_MEASURE_START(debug_en);
+				draw_overlay_preprocess(&draw_plate_list, &license_result, bbox_param, debug_en);
+				RVAL_OK(set_overlay_image(img_tensor, &draw_plate_list));
+				TIME_MEASURE_END("[LPR] LPR draw overlay time", debug_en);
+#endif
+				size_t char_len = strlen(license_result.license_info[0].text);
+				LOG(INFO) << "LPR:"  << license_result.license_info[0].text << " " \
+							<< license_result.license_info[0].conf << " "
+							<< char_len << " " << textLine.charScores.size();
+				if (license_result.license_info[0].conf > DEFAULT_LPR_CONF_THRES && \
+					(char_len == 9 || char_len == 10))
+					{
+						pthread_mutex_lock(&result_mutex);
+						if(license_result.license_info[0].conf > lpr_confidence)
+						{
+							lpr_result = license_result.license_info[0].text;
+							lpr_confidence = license_result.license_info[0].conf;
+							LOG(WARNING) << "LPR:"  << lpr_result << " " << lpr_confidence;
+						}
+						bbox_param_t lpr_bbox = {0};
+						lpr_bbox.norm_min_x = bbox_param[0].norm_min_x * lpr_param->width;
+						lpr_bbox.norm_min_y = bbox_param[0].norm_min_y * lpr_param->height;
+						lpr_bbox.norm_max_x = bbox_param[0].norm_max_x * lpr_param->width;
+						lpr_bbox.norm_max_y = bbox_param[0].norm_max_y * lpr_param->height;
+						if(list_lpr_bbox.bbox_num < MAX_OVERLAY_PLATE_NUM)
+						{
+							list_lpr_bbox.bbox[list_lpr_bbox.bbox_num++] = lpr_bbox;
+						}
+						else
+						{
+							LOG(INFO) << "not add lpr bbox";
+						}
+						LOG(INFO) << "LPR bbox: " << lpr_bbox.norm_min_x << " " \
+													<< lpr_bbox.norm_min_y << " " \
+													<< lpr_bbox.norm_max_x << " " \
+													<< lpr_bbox.norm_max_y;
+						pthread_mutex_unlock(&result_mutex);
+					}
+
+#if defined(OFFLINE_DATA)
+				for (int i = 0; i < data->tensor_num; i++) {
+					if (data->tensor_group[i]) {
+						ea_tensor_free(data->tensor_group[i]);
+						data->tensor_group[i] = NULL;
+					}
+				}
+				free(data->tensor_group);
+				data->tensor_group = NULL;
+				data->led_group = NULL;
+#else
+				RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
+#endif
+				sum_time += (gettimeus() - start_time);
+				++loop_count;
+				average_license_num += license_num;
+				if (loop_count == TIME_MEASURE_LOOPS) {
+					float average_time1 = sum_time / (1000 * TIME_MEASURE_LOOPS);
+					float average_time2 = (average_license_num > 0.0f) ? (sum_time / (1000 * average_license_num)) : 0.0f;
+					LOG(INFO) << "[" << TIME_MEASURE_LOOPS  << "loops] LPR average time license_num " << " " << average_license_num / TIME_MEASURE_LOOPS;
+					LOG(WARNING) << "LPR average time:"<< average_time1 << " per license cost time:" << average_time2;
+					sum_time = 0;
+					loop_count = 1;
+					average_license_num = license_num;
+				}
+			}
+#if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
+			lpr_result = "";
+			lpr_confidence = 0;
+			list_lpr_bbox.bbox_num = 0;
+			usleep(20000);
+#endif
+		}
+	} while (0);
+	do {
+		run_flag = 0;
+		free_single_state_buffer(ssd_mid_buf);
+		LOG(WARNING) << "LPR thread quit.";
+	} while (0);
+
+	return NULL;
+}
+
+static void *run_det_lpr_pthread(void *thread_params)
+{
+	int rval = 0;
+	unsigned long long int frame_number = 0;
+	lpr_thread_params_t *det_lpr_param =
+		(lpr_thread_params_t*)thread_params;
+	global_control_param_t *G_param = det_lpr_param->G_param;
+
+	// YOLOV5 param
+	yolov5_t yolov5_ctx;
+	landmark_yolov5_result_s yolov5_net_result;
+	int license_box_num = 0;
+
+	state_buffer_t *ssd_mid_buf;
+	bbox_list_t bbox_list = {0};
+
+	// image related
+	ea_tensor_t *img_tensor = NULL;
+	ea_img_resource_data_t data;
+	uint32_t dsp_pts = 0;
+
+	// Time measurement
+	uint64_t start_time = 0;
+	uint64_t debug_time = 0;
+	float sum_time = 0.0f;
+	uint32_t loop_count = 1;
+	uint32_t debug_en = G_param->debug_en;
+
+	uint32_t list_index = 0;
+	list_has_lpr.bbox_num = 0;
+
+#if defined(OFFLINE_DATA)
+	ea_tensor_t **tensors = NULL;
+	int tensor_num = 1;
+	size_t img_shape[4] = {1, 1, det_lpr_param->height * 3 / 2, det_lpr_param->width};
+	// void *yuv_data = ea_tensor_data_for_read(dst, EA_CPU);
+#endif
+
+	std::cout << "det_lpr size:" << det_lpr_param->width << " " << det_lpr_param->height << " " << det_lpr_param->pitch << std::endl;
+
+	prctl(PR_SET_NAME, "det_lpr_pthread");
+
+	do {
+		memset(&data, 0, sizeof(data));
+		memset(&bbox_list, 0, sizeof(bbox_list_t));
+
+		memset(&yolov5_ctx, 0, sizeof(yolov5_t));
+		memset(&yolov5_net_result, 0, sizeof(landmark_yolov5_result_s));
+		RVAL_OK(init_yolov5(&yolov5_ctx, G_param));
+
+		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
+ 
+		while (run_flag) {
+#if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
+			while(run_lpr > 0)
+#endif
+			{
+				start_time = gettimeus();
+
+				TIME_MEASURE_START(debug_en);
+#if defined(OFFLINE_DATA)
+				cv::Mat src_image;
+				save_process.get_image_yuv(src_image);
+				if(src_image.empty())
+				{
+					LOG(ERROR) << "det_lpr get image fail!";
+					continue;
+				}
+				img_tensor = ea_tensor_new(EA_U8, img_shape, det_lpr_param->pitch);
+				mat2tensor_yuv_nv12(src_image, img_tensor);
+				tensors = (ea_tensor_t **)malloc(sizeof(ea_tensor_t *) * 1);
+				RVAL_ASSERT(tensors != NULL);
+				memset(tensors, 0, sizeof(ea_tensor_t *) * 1);
+				// led_status = (int *)malloc(sizeof(int) * 1);
+				// RVAL_ASSERT(led_status != NULL);
+				// memset(led_status, 0, sizeof(int) * 1);
+				// led_status[0] = 0;
+				data.mono_pts = 0;
+				data.dsp_pts = 0;
+				data.tensor_group = tensors;
+				data.tensor_num = tensor_num;
+				data.led_group = NULL;
+				data.tensor_group[DEFAULT_SSD_LAYER_ID] = img_tensor;
+
+				// std::stringstream filename_image;
+                // filename_image << "/data/save_data/" << "image_" << frame_number << ".jpg";
+				// RVAL_OK(ea_tensor_to_jpeg(img_tensor, EA_TENSOR_COLOR_MODE_YUV_NV12, filename_image.str().c_str()));
+				// frame_number++;
+#else
+				RVAL_OK(ea_img_resource_hold_data(G_param->img_resource, &data));
+				RVAL_ASSERT(data.tensor_group != NULL);
+				RVAL_ASSERT(data.tensor_num >= 1);
+				img_tensor = data.tensor_group[DEFAULT_SSD_LAYER_ID];
+				dsp_pts = data.dsp_pts;
+#endif
+				TIME_MEASURE_END("[det_lpr]run_lpr get yuv cost time", debug_en);
+				// std::cout << "det_lpr size:" << ea_tensor_shape(img_tensor)[0] << " " << ea_tensor_shape(img_tensor)[1] << " " << ea_tensor_shape(img_tensor)[2] << " " << ea_tensor_shape(img_tensor)[3] << std::endl;
+				// SAVE_TENSOR_IN_DEBUG_MODE("det_lpr_pyd.jpg", img_tensor, debug_en);
+				// if(frame_number % 80 == 0)
+				// {
+				// 	has_lpr = 0;
+				// }
+
+				TIME_MEASURE_START(debug_en);
+				RVAL_OK(ea_cvt_color_resize(img_tensor, yolov5_input(&yolov5_ctx), EA_COLOR_YUV2RGB_NV12, EA_VP));
+				TIME_MEASURE_END("[det_lpr] preprocess time", debug_en);
+
+				TIME_MEASURE_START(debug_en);
+				rval = yolov5_vp_forward(&yolov5_ctx);
+				TIME_MEASURE_END("[det_lpr] network time", debug_en);
+
+				TIME_MEASURE_START(debug_en);
+				yolov5_net_result.valid_det_count = 0;
+				RVAL_OK(landmark_yolov5_arm_post_process(&yolov5_ctx, &yolov5_net_result));
+				TIME_MEASURE_END("[det_lpr] ARM NMS time", debug_en);
+
+				TIME_MEASURE_START(debug_en);
+				license_box_num = min(yolov5_net_result.valid_det_count, MAX_DETECTED_LICENSE_NUM);
+				bbox_list.bbox_num = min(license_box_num, MAX_OVERLAY_PLATE_NUM);
+				RVAL_OK(yolov5_critical_resource(yolov5_net_result.detections, &data, bbox_list.bbox_num, ssd_mid_buf, G_param));
+
+				pthread_mutex_lock(&result_mutex);
+				if(bbox_list.bbox_num > 0)
+				{
+					has_lpr = 1;
+				}
+				else
+				{
+					has_lpr = 0;
+				}
+				if(list_has_lpr.bbox_num < MAX_OVERLAY_PLATE_NUM)
+					list_has_lpr.bbox_num++;
+				list_has_lpr.has[list_index++] = has_lpr;
+				list_index = list_index % MAX_OVERLAY_PLATE_NUM;
+				pthread_mutex_unlock(&result_mutex);
+				LOG(WARNING) << "lpr box count:" << bbox_list.bbox_num;
+
+				TIME_MEASURE_END("[det_lpr] post-process time", debug_en);
+
+#ifdef IS_SHOW
+				for (int i = 0; i < bbox_list.bbox_num; ++i) {
+					bbox_list.bbox[i].norm_min_x = yolov5_net_result.detections[i].x_start;
+					bbox_list.bbox[i].norm_min_y = yolov5_net_result.detections[i].y_start;
+					bbox_list.bbox[i].norm_max_x = yolov5_net_result.detections[i].x_end;
+					bbox_list.bbox[i].norm_max_y = yolov5_net_result.detections[i].y_end;
+					bbox_list.bbox[i].score = yolov5_net_result.detections[i].score;
+					if(yolov5_net_result.detections[i].p1_x > yolov5_net_result.detections[i].p2_x && \
+						yolov5_net_result.detections[i].p4_x > yolov5_net_result.detections[i].p3_x)
+					{
+						bbox_list.bbox[i].p1_x = yolov5_net_result.detections[i].p1_x;
+						bbox_list.bbox[i].p1_y = yolov5_net_result.detections[i].p1_y;
+						bbox_list.bbox[i].p2_x = yolov5_net_result.detections[i].p2_x;
+						bbox_list.bbox[i].p2_y = yolov5_net_result.detections[i].p2_y;
+						bbox_list.bbox[i].p3_x = yolov5_net_result.detections[i].p3_x;
+						bbox_list.bbox[i].p3_y = yolov5_net_result.detections[i].p3_y;
+						bbox_list.bbox[i].p4_x = yolov5_net_result.detections[i].p4_x;
+						bbox_list.bbox[i].p4_y = yolov5_net_result.detections[i].p4_y;
+					}
+					else
+					{
+						bbox_list.bbox[i].p1_x = yolov5_net_result.detections[i].p2_x;
+						bbox_list.bbox[i].p1_y = yolov5_net_result.detections[i].p2_y;
+						bbox_list.bbox[i].p2_x = yolov5_net_result.detections[i].p1_x;
+						bbox_list.bbox[i].p2_y = yolov5_net_result.detections[i].p1_y;
+						bbox_list.bbox[i].p3_x = yolov5_net_result.detections[i].p4_x;
+						bbox_list.bbox[i].p3_y = yolov5_net_result.detections[i].p4_y;
+						bbox_list.bbox[i].p4_x = yolov5_net_result.detections[i].p3_x;
+						bbox_list.bbox[i].p4_y = yolov5_net_result.detections[i].p3_y;
+					}
+
+					LOG(INFO) << "lpr norm box:" << yolov5_net_result.detections[i].x_start << " " << \
+					                                yolov5_net_result.detections[i].y_start << " " << \
+										            yolov5_net_result.detections[i].x_end << " " << \
+										            yolov5_net_result.detections[i].y_end << " " << \
+													yolov5_net_result.detections[i].p1_x << " " << \
+													yolov5_net_result.detections[i].p1_y << " " << \
+													yolov5_net_result.detections[i].p2_x << " " << \
+													yolov5_net_result.detections[i].p2_y << " " << \
+													yolov5_net_result.detections[i].p3_x << " " << \
+													yolov5_net_result.detections[i].p3_y << " " << \
+													yolov5_net_result.detections[i].p4_x << " " << \
+													yolov5_net_result.detections[i].p4_y;
+				}
+
+				RVAL_OK(set_overlay_bbox(&bbox_list));
+				RVAL_OK(show_overlay(dsp_pts));
+#endif
+
+				sum_time += (gettimeus() - start_time);
+				++loop_count;
+				if (loop_count == TIME_MEASURE_LOOPS) {
+					LOG(WARNING) << "det_lpr average time [per " << TIME_MEASURE_LOOPS << " loops]:" << sum_time / (1000 * TIME_MEASURE_LOOPS) << "ms";
+					sum_time = 0;
+					loop_count = 1;
+				}
+			}
+#if defined(OFFLINE_DATA) && defined(IS_PC_RUN) && defined(IS_LPR_RUN)
+            TIME_MEASURE_START(debug_en);
+			cv::Mat src_image;
+			save_process.get_image(src_image);
+			if(src_image.empty())
+			{
+				LOG(ERROR) << "det_lpr get image fail!";
+				continue;
+			}
+			has_lpr = 0;
+			TIME_MEASURE_END("[det_lpr] get yuv cost time", debug_en);
+#elif defined(IS_PC_RUN) && defined(IS_LPR_RUN)
+            has_lpr = 0;
+			list_index = 0;
+			list_has_lpr.bbox_num = 0;
+			usleep(20000);
+#endif
+		}
+	} while (0);
+	do {
+		run_flag = 0;
 		yolov5_deinit(&yolov5_ctx);
 		free_single_state_buffer(ssd_mid_buf);
 		LOG(WARNING) << "det_lpr thread quit.";
@@ -911,6 +1125,8 @@ static void *run_det_lpr_pthread(void *thread_params)
 
 	return NULL;
 }
+
+#endif
 
 static void *run_denet_pthread(void *thread_params)
 {
@@ -920,16 +1136,23 @@ static void *run_denet_pthread(void *thread_params)
 	const std::vector<std::string> input_name = {"images"};
 	const std::vector<std::string> output_name = {"444", "385", "326"};
 	const char* class_name[CLASS_NUMBER] = {"car"};
-	global_control_param_t *G_param = (global_control_param_t*)thread_params;
+
 	int rval = 0;
+	lpr_thread_params_t *denet_param =
+		(lpr_thread_params_t*)thread_params;
+	global_control_param_t *G_param = denet_param->G_param;
+	uint32_t debug_en = G_param->debug_en;
+
 	std::vector<std::vector<float>> boxes;
+
 	// image related
 	ea_tensor_t *img_tensor = NULL;
 	ea_img_resource_data_t data;
 	uint32_t dsp_pts = 0;
 	bbox_list_t bbox_list = {0};
 	cv::Mat src_image;
-    // DeNet denet_process;
+	cv::Mat bgr;
+	
 	DeNetV2 denet_process;
 	// Time measurement
 	uint64_t start_time = 0;
@@ -937,14 +1160,24 @@ static void *run_denet_pthread(void *thread_params)
 	float sum_time = 0.0f;
 	uint32_t loop_count = 1;
 
-	int width = 0;
-	int height = 0;
-
 	int car_count = 0;
 	float iou = 0;
-	std::vector<float> roi = {600, 900, 1320, 180};
+#if IMAGE_HEIGHT == 1080
+	std::vector<float> roi = {600, 900};
+#elif IMAGE_HEIGHT == 720
+	std::vector<float> roi = {350, 630};
+#endif
 
-	// cv::Mat bgr(height * 2 / 3, width, CV_8UC3);
+#if defined(OFFLINE_DATA)
+	ea_tensor_t **tensors = NULL;
+	int tensor_num  = 1;
+	size_t img_shape[4] = {1, 1, denet_param->height * 3 / 2, denet_param->width};
+#endif
+
+	uint32_t list_index = 0;
+	list_has_car.bbox_num = 0;
+
+	std::cout << "denet size:" << denet_param->width << " " << denet_param->height << " " << denet_param->pitch << std::endl;
 
 	prctl(PR_SET_NAME, "run_denet_pthread");
 
@@ -954,6 +1187,7 @@ static void *run_denet_pthread(void *thread_params)
         return NULL;
     }
 	memset(&data, 0, sizeof(data));
+	denet_process.set_log((int)debug_en);
 
 	while(run_flag)
 	{
@@ -969,6 +1203,23 @@ static void *run_denet_pthread(void *thread_params)
 				LOG(ERROR) << "DeNet get image fail!";
 				continue;
 			}
+			save_process.get_image_yuv(src_image);
+			
+			img_tensor = ea_tensor_new(EA_U8, img_shape, denet_param->pitch);
+			mat2tensor_yuv_nv12(src_image, img_tensor);
+			tensors = (ea_tensor_t **)malloc(sizeof(ea_tensor_t *) * 1);
+			RVAL_ASSERT(tensors != NULL);
+			memset(tensors, 0, sizeof(ea_tensor_t *) * 1);
+			// led_status = (int *)malloc(sizeof(int) * 1);
+			// RVAL_ASSERT(led_status != NULL);
+			// memset(led_status, 0, sizeof(int) * 1);
+			// led_status[0] = 0;
+			data.mono_pts = 0;
+			data.dsp_pts = 0;
+			data.tensor_group = tensors;
+			data.tensor_num = tensor_num;
+			data.led_group = NULL;
+			data.tensor_group[DEFAULT_LPR_LAYER_ID] = img_tensor;
 #else
 			// image_geter.get_image(src_image);
 			// if(src_image.empty())
@@ -979,21 +1230,19 @@ static void *run_denet_pthread(void *thread_params)
 			RVAL_OK(ea_img_resource_hold_data(G_param->img_resource, &data));
 			RVAL_ASSERT(data.tensor_group != NULL);
 			RVAL_ASSERT(data.tensor_num >= 1);
-			img_tensor = data.tensor_group[0];
+			img_tensor = data.tensor_group[DEFAULT_LPR_LAYER_ID];
 			dsp_pts = data.dsp_pts;
-			width = ea_tensor_shape(img_tensor)[3];
-			height = ea_tensor_shape(img_tensor)[2];
 			// RVAL_OK(ea_tensor_to_jpeg(img_tensor, EA_TENSOR_COLOR_MODE_YUV_NV12, "image.jpg"));
 #endif
 
 #ifdef IS_SAVE
 				TIME_MEASURE_START(debug_en);
-				// RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
-				// save_process.put_image_data(bgr);
-				std::stringstream filename_image;
-                filename_image << save_process.get_image_save_dir() << "image_" << frame_number << ".jpg";
-				RVAL_OK(ea_tensor_to_jpeg(img_tensor, EA_TENSOR_COLOR_MODE_YUV_NV12, filename_image.str().c_str()));
-				TIME_MEASURE_END("yuv to bgr time", debug_en);
+				RVAL_OK(tensor2mat_yuv2bgr_nv12(img_tensor, bgr));
+				save_process.put_image_data(bgr);
+				// std::stringstream filename_image;
+                // filename_image << save_process.get_image_save_dir() << "image_" << frame_number << ".jpg";
+				// RVAL_OK(ea_tensor_to_jpeg(img_tensor, EA_TENSOR_COLOR_MODE_YUV_NV12, filename_image.str().c_str()));
+				// TIME_MEASURE_END("yuv to bgr time", debug_en);
 #endif
 			boxes = denet_process.run(img_tensor);
 			car_count = 0;
@@ -1002,7 +1251,7 @@ static void *run_denet_pthread(void *thread_params)
 			{
 				iou = cal_iou(boxes[i], roi);
 				LOG(WARNING) << "car iou:" << iou;
-				if(iou > 0.2f)
+				if(iou > 0.01)
 				{
 					float xmin = boxes[i][0];
 					float ymin = boxes[i][1];
@@ -1010,35 +1259,59 @@ static void *run_denet_pthread(void *thread_params)
 					float ymax = ymin + boxes[i][3];
 					int type = boxes[i][4];
 					float confidence = boxes[i][5];
-					bbox_list.bbox[car_count].norm_min_x = xmin / width;
-					bbox_list.bbox[car_count].norm_min_y = ymin / height;
-					bbox_list.bbox[car_count].norm_max_x = xmax / width;
-					bbox_list.bbox[car_count].norm_max_y = ymax / height;
+					bbox_list.bbox[car_count].norm_min_x = xmin / denet_param->width;
+					bbox_list.bbox[car_count].norm_min_y = ymin / denet_param->height;
+					bbox_list.bbox[car_count].norm_max_x = xmax / denet_param->width;
+					bbox_list.bbox[car_count].norm_max_y = ymax / denet_param->height;
+					bbox_list.bbox[car_count].score = confidence;
 					car_count++;
 					LOG(WARNING) << "car box:" << xmin << " " << ymin << " " << xmax << " " << ymax << " " << confidence;
 				}
 			}
-			bbox_list.bbox_num = car_count;
+			
 #if defined(IS_PC_RUN) && defined(IS_CAR_RUN)
-			if(bbox_list.bbox_num > 0)
+			pthread_mutex_lock(&result_mutex);
+			if(car_count > 0)
 			{
-				pthread_mutex_lock(&result_mutex);
-				list_has_car.push_back(1);
-				pthread_mutex_unlock(&result_mutex);
+				if(list_has_car.bbox_num < MAX_OVERLAY_PLATE_NUM)
+					list_has_car.bbox_num++;
+				list_has_car.has[list_index++] = 1;
+				list_index = list_index % MAX_OVERLAY_PLATE_NUM;
 			}
 			else
 			{
-				pthread_mutex_lock(&result_mutex);
-				list_has_car.push_back(0);
-				pthread_mutex_unlock(&result_mutex);
+				if(list_has_car.bbox_num < MAX_OVERLAY_PLATE_NUM)
+					list_has_car.bbox_num++;
+				list_has_car.has[list_index++] = 0;
+				list_index = list_index % MAX_OVERLAY_PLATE_NUM;
 			}
+			pthread_mutex_unlock(&result_mutex);
 #endif 
-			LOG(WARNING) << "car count:" <<bbox_list.bbox_num;
+			LOG(WARNING) << "car count:" << car_count;
 #ifdef IS_SHOW
+			bbox_list.bbox_num = car_count;
+			bbox_list.bbox[bbox_list.bbox_num].norm_min_x = roi[0] / denet_param->width;
+			bbox_list.bbox[bbox_list.bbox_num].norm_min_y = roi[1] / denet_param->height;
+			bbox_list.bbox[bbox_list.bbox_num].norm_max_x = 1;
+			bbox_list.bbox[bbox_list.bbox_num].norm_max_y = 1;
+			bbox_list.bbox_num++;
 			RVAL_OK(set_car_bbox(&bbox_list));
 			RVAL_OK(show_overlay(dsp_pts));
 #endif
+
+#if defined(OFFLINE_DATA)
+			for (int i = 0; i < data.tensor_num; i++) {
+				if (data.tensor_group[i]) {
+					ea_tensor_free(data.tensor_group[i]);
+					data.tensor_group[i] = NULL;
+				}
+			}
+			free(data.tensor_group);
+			data.tensor_group = NULL;
+			data.led_group = NULL;
+#else
 			RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, &data));
+#endif
 			sum_time += (gettimeus() - start_time);
 			++loop_count;
 			if (loop_count == TIME_MEASURE_LOOPS) {
@@ -1048,7 +1321,9 @@ static void *run_denet_pthread(void *thread_params)
 			}
 		}
 #if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
-		usleep(50000);
+		list_index = 0;
+	    list_has_car.bbox_num = 0;
+		usleep(20000);
 #endif
 	}
 	network_process.send_error(12);
@@ -1125,13 +1400,13 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 	while(run_flag > 0)
 	{
 		start_time = gettimeus();
-		TIME_MEASURE_START(1);
+		TIME_MEASURE_START(debug_en);
 #if defined(OFFLINE_DATA)
 		save_process.get_tof_depth_map(depth_map);
 #else
 		tof_geter.get_tof_depth_map(depth_map, &stamp);
 #endif
-		TIME_MEASURE_END("[point_cloud] get TOF cost time", 1);
+		TIME_MEASURE_END("[point_cloud] get TOF cost time", debug_en);
 
 		TIME_MEASURE_START(debug_en);
 		cv::GaussianBlur(depth_map, filter_map, cv::Size(9, 9), 3.5, 3.5);
@@ -1143,10 +1418,10 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 		LOG(WARNING) << "bg_point_count:" << bg_point_count;
 		TIME_MEASURE_END("[point_cloud] bgs cost time", debug_en);
 
-		TIME_MEASURE_START(debug_en);
-		object_count = has_motion_target(img_output);
-		LOG(WARNING) << "motion target count:" << object_count;
-		TIME_MEASURE_END("[point_cloud] bgs cost time", debug_en);
+		// TIME_MEASURE_START(debug_en);
+		// object_count = has_motion_target(img_output);
+		// LOG(WARNING) << "motion target count:" << object_count;
+		// TIME_MEASURE_END("[point_cloud] bgs cost time", debug_en);
 
 		// if(process_number % 1 == 0)
 		// {
@@ -1157,6 +1432,7 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 		// }
 		// process_number++;
 
+		TIME_MEASURE_START(debug_en);
 		if(bg_point_count > 50)
 		{
 			no_process_number = 0;
@@ -1177,16 +1453,23 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 #endif
 			// if(has_lpr == 1)
 			{
-				point_cout_list.push_back(bg_point_count);
+				// point_cout_list.push_back(bg_point_count);
+				int point_count = compute_depth_map(bg_map, filter_map);
+				point_cout_list.push_back(point_count);
+				LOG(WARNING) << "point_count:" << point_count;
 			}
 		}
 		else
 		{
 			no_process_number++;
-			if(no_process_number % 15 == 0)
+			
+			// int point_count = compute_depth_map(bg_map, filter_map);
+			// point_cout_list.push_back(point_count);
+			// LOG(WARNING) << "bg_point_count:" << point_count;
+			if(no_process_number % 20 == 0)
 			{
-				int in_out_result = vote_in_out(point_cout_list);
 				int point_count = compute_depth_map(bg_map, filter_map);
+				int in_out_result = vote_in_out(point_cout_list);
 				LOG(WARNING) << "final point_count:" << point_count << " " << in_out_result;
 				if(in_out_result == 1 && point_count >= 400)
 				{
@@ -1222,7 +1505,7 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 				LOG(WARNING) << "no process";
 			}
 		}
-		TIME_MEASURE_END("[point_cloud] cost time", debug_en);
+		TIME_MEASURE_END("[point_cloud] process cost time", debug_en);
 
 		if(process_number % 10 == 0)
 		{
@@ -1256,12 +1539,10 @@ static int start_all(global_control_param_t *G_param)
 	pthread_t lpr_pthread_id = 0;
 	lpr_thread_params_t lpr_thread_params;
 	lpr_thread_params_t det_lpr_thread_params;
+	lpr_thread_params_t denet_thread_param;
 
 	ea_tensor_t *img_tensor = NULL;
 	ea_img_resource_data_t data;
-
-	list_has_lpr.clear();
-	list_lpr_bbox.clear();
 
 	if(network_process.start() < 0)
 	{
@@ -1320,6 +1601,10 @@ static int start_all(global_control_param_t *G_param)
 		lpr_thread_params.width = ea_tensor_shape(img_tensor)[3];
 		lpr_thread_params.pitch = ea_tensor_pitch(img_tensor);
 		lpr_thread_params.G_param = G_param;
+		denet_thread_param.height = ea_tensor_shape(img_tensor)[2];
+		denet_thread_param.width = ea_tensor_shape(img_tensor)[3];
+		denet_thread_param.pitch = ea_tensor_pitch(img_tensor);
+		denet_thread_param.G_param = G_param;
 		img_tensor = data.tensor_group[DEFAULT_SSD_LAYER_ID];
 		det_lpr_thread_params.height = ea_tensor_shape(img_tensor)[2];
 		det_lpr_thread_params.width = ea_tensor_shape(img_tensor)[3];
@@ -1334,7 +1619,7 @@ static int start_all(global_control_param_t *G_param)
 #endif
 
 #if defined(IS_CAR_RUN)
-		rval = pthread_create(&denet_pthread_id, NULL, run_denet_pthread, (void*)G_param);
+		rval = pthread_create(&denet_pthread_id, NULL, run_denet_pthread, (void*)&denet_thread_param);
 		RVAL_ASSERT(rval == 0);
 #endif
 		rval = pthread_create(&process_recv_pthread_id, NULL, process_recv_pthread, NULL);

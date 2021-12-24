@@ -105,6 +105,7 @@ typedef struct bbox_param_s {
 	float p3_y;
 	float p4_x;
 	float p4_y;
+	float score;
 } bbox_param_t;
 
 #endif

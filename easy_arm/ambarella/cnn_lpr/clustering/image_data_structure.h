@@ -60,11 +60,11 @@ typedef struct MyRectangle
 
 typedef struct ResultRect
 {
-    int x;
-    int y;
-    int width;
-    int height;
-    int confidence;
+    long x;
+    long y;
+    long width;
+    long height;
+    long confidence;
 }ResultRect;
 
 #endif // IMAGE_DATA_STRUCTURE_H

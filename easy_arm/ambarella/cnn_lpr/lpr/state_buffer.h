@@ -45,6 +45,7 @@ extern "C" {
 #define MIN_STATE_BUFFER_NUM 2
 
 typedef struct bbox_param_s bbox_param_t;
+
 typedef struct state_buffer_s {
 	uint32_t status;
 	uint32_t object_num;
