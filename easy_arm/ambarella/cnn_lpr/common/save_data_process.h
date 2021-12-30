@@ -92,6 +92,9 @@ private:
     unsigned long long int save_index;
     unsigned long long int tof_frame_number;
     unsigned long long int image_frame_number;
+
+    pthread_attr_t tof_pthread_attr;
+    pthread_attr_t image_pthread_attr;
 };
 
 #endif // _SAVE_DATA_PROCESS_H_

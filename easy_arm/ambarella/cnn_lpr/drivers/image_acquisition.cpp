@@ -2301,19 +2301,32 @@ static void *run_camera_pthread(void* data)
 {
 	uint64_t start_time = 0;
 	int buffer_id = 3;
+	int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
 	prctl(PR_SET_NAME, "camera_pthread");
 	while(run_camera) {
 		start_time = gettimeus();
 		pthread_mutex_lock(&image_buffer.lock);  
 		if ((image_buffer.writepos + 1) % IMAGE_BUFFER_SIZE == image_buffer.readpos)  
 		{  
-			// struct timeval now;
-    		// struct timespec outtime;
-			// gettimeofday(&now, NULL);
-			// outtime.tv_sec = now.tv_sec + 1;
-			// outtime.tv_nsec = now.tv_usec;
-			// pthread_cond_timedwait(&image_buffer.notfull, &image_buffer.lock, &outtime);
-			pthread_cond_wait(&image_buffer.notfull, &image_buffer.lock);  
+#if defined(ONLY_SAVE_DATA)
+			struct timeval now;
+    		struct timespec outtime;
+			gettimeofday(&now, NULL);
+    		outtime.tv_sec = now.tv_sec + 1;
+    		outtime.tv_nsec = now.tv_usec * 1000;
+			pthread_cond_timedwait(&image_buffer.notfull, &image_buffer.lock, &outtime);
+#else
+			pthread_cond_wait(&image_buffer.notfull, &image_buffer.lock);
+#endif  
 		}
 		// std::cout << "1111111111111111111" << std::endl;
 		memset(image_buffer.buffer[image_buffer.writepos], 0, IMAGE_YUV_SIZE * sizeof(u8));

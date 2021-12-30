@@ -19,8 +19,7 @@
 //#define OFFLINE_DATA
 
 #if defined(ONLY_SAVE_DATA) || defined(ONLY_SEND_DATA)
-#define IMAGE_BUFFER_SIZE (5)
-#define IMAGE_BUFFER_SIZE (5)
+#define IMAGE_BUFFER_SIZE (10)
 #else
 #define IMAGE_BUFFER_SIZE (2)
 #endif

@@ -11,7 +11,9 @@
 //opencv
 #include <opencv2/core.hpp>
 
-#define TOF_BUFFER_SIZE (5)
+//#define ONLY_SAVE_DATA
+
+#define TOF_BUFFER_SIZE (10)
 #define MAX_POINT_CLOUD (240*180)
 
 #define DEPTH_WIDTH (240)
@@ -53,10 +55,10 @@ public:
     void set_up();
     void set_sleep();
 
-    void get_tof_depth_map(cv::Mat &depth_map);
-    void get_tof_depth_map(cv::Mat &depth_map, long *stamp);
+    int get_tof_depth_map(cv::Mat &depth_map);
+    int get_tof_depth_map(cv::Mat &depth_map, long *stamp);
 
-    void get_tof_Z(unsigned char* addr);
+    int get_tof_Z(unsigned char* addr);
 
     // void get_tof_pc(PointCloud &point_cloud);
 

@@ -244,3 +244,37 @@ void fill_data(unsigned char* addr, int data)
 	addr[2] = (data >>  8) & 0xFF;
 	addr[3] = (data >>  0) & 0xFF;
 }
+
+int get_system_tf_free(const std::string &dir_path, size_t *mb_freedisk)
+{
+	int ret = 0;
+    struct statfs diskInfo = {0};
+    if(statfs(dir_path.c_str(),&diskInfo) == 0)
+	{
+		unsigned long long total_blocks = diskInfo.f_bsize;  
+		unsigned long long total_size = total_blocks * diskInfo.f_blocks;  
+		size_t mb_totalsize = total_size >> 20;  
+		unsigned long long free_disk = diskInfo.f_bfree * total_blocks;  
+	    *mb_freedisk = free_disk >> 20; 
+	}
+	else
+	{
+		LOG(ERROR) << "get_system_tf_free error!";
+		ret = -1;
+	}
+	return ret;
+}
+
+// double disk_rate_calculate(const std::string &dir_path) 
+// {
+//     double disk_rate=0.0;
+//     struct statfs sf;
+//     if(0 == statfs(dir_path.c_str(), &sf)){
+//             disk_rate=((sf.f_blocks-sf.f_bfree)*100.0/sf.f_blocks);
+//     }else{
+//             std::cout << "error:" << std::endl;
+//     }
+//     std::cout << "disk rate: "<< disk_rate << std::endl;
+
+//     return disk_rate;
+// }

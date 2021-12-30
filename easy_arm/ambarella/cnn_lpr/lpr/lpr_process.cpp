@@ -1,6 +1,8 @@
 #include "lpr_process.h"
 #include <iostream>
 
+const static float cluster_threshold = 0.12f;
+
 const static std::string lpr_model_path = "/data/lpr/segfree_inception_cavalry.bin";
 const static std::vector<std::string> lpr_input_name = {"data"};
 const static std::vector<std::string> lpr_output_name = {"prob"};
@@ -165,15 +167,14 @@ int lpr_critical_resource(uint16_t *license_num, bbox_param_t *bbox_param,
 			bbox_param[i].p4_x = ssd_mid_buf->bbox_param[i].p4_x;
 			bbox_param[i].p4_y = ssd_mid_buf->bbox_param[i].p4_y;
 		}
-		if (G_param->debug_en >= INFO_LEVEL) {
-			LOG(INFO) << "------------------------------";
-			LOG(INFO) << "LPR got bboxes:";
-			for (i = 0; i < *license_num; ++i) {
-				LOG(INFO) << i << " " << bbox_param[i].norm_min_x << "," << bbox_param[i].norm_min_y << "|" << \
-				bbox_param[i].norm_max_x << "," << bbox_param[i].norm_max_y;
-			}
-			LOG(INFO) << "------------------------------";
+		
+		LOG(INFO) << "------------------------------";
+		LOG(INFO) << "LPR got bboxes:";
+		for (i = 0; i < *license_num; ++i) {
+			LOG(INFO) << i << " " << bbox_param[i].norm_min_x << "," << bbox_param[i].norm_min_y << "|" << \
+			bbox_param[i].norm_max_x << "," << bbox_param[i].norm_max_y;
 		}
+		LOG(INFO) << "------------------------------";
 	} while (0);
 
 	return rval;
@@ -225,7 +226,7 @@ void bbox_list_process(const bbox_list_t *list_lpr_bbox, bbox_list_t *result_bbo
 	}
 	if(input_count > 0)
 	{
-		clusteringRect(input_bbox, input_count, 0.12f, output_bbox, &output_count);
+		clusteringRect(input_bbox, input_count, cluster_threshold, output_bbox, &output_count);
 		for(size_t i = 0; i < output_count; i++)
 		{
 			bbox_param_t bbox = {0};

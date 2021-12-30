@@ -222,8 +222,6 @@ int NetWorkProcess::stop()
 
     LOG(WARNING) << "stop network";
 
-	sem_post(&sem_put);
-
 	if (heart_pthread_id > 0) {
 		pthread_join(heart_pthread_id, NULL);
         heart_pthread_id = 0;
@@ -239,7 +237,15 @@ int NetWorkProcess::stop()
 int NetWorkProcess::process_recv()
 {
 	int result = 0;
-	if(sem_wait(&sem_put) == 0)
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	ts.tv_sec += 10;
+	ts.tv_nsec = 0;
+	if(sem_timedwait(&sem_put, &ts) < 0) 
+	{
+		result = 0;
+	}
+	else
 	{
 		if(recv_code == 101)
 		{
@@ -323,4 +329,9 @@ int NetWorkProcess::send_save_data()
 		0, (struct sockaddr *)&dest_addr,sizeof(dest_addr));
 	pthread_mutex_unlock(&send_mutex);
 	return 0;
+}
+
+void NetWorkProcess::send_post()
+{
+	sem_post(&sem_put);
 }

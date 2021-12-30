@@ -1309,6 +1309,17 @@ static void *run_tof_pthread(void* data)
 	float *Xvalue = NULL, *Yvalue = NULL, *Zvalue = NULL;
 	int nImgsize = 0;
 
+	int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
+
 	prctl(PR_SET_NAME, "tof_pthread");
 
 	while(run_tof) {
@@ -1343,7 +1354,16 @@ static void *run_tof_pthread(void* data)
 		pthread_mutex_lock(&tof_buffer.lock);  
 		if ((tof_buffer.writepos + 1) % TOF_BUFFER_SIZE == tof_buffer.readpos)  
 		{  
-			pthread_cond_wait(&tof_buffer.notfull, &tof_buffer.lock);  
+#if defined(ONLY_SAVE_DATA)
+			struct timeval now;
+    		struct timespec outtime;
+			gettimeofday(&now, NULL);
+    		outtime.tv_sec = now.tv_sec + 1;
+    		outtime.tv_nsec = now.tv_usec * 1000;
+			pthread_cond_timedwait(&tof_buffer.notfull, &tof_buffer.lock, &outtime);
+#else
+			pthread_cond_wait(&tof_buffer.notfull, &tof_buffer.lock);
+#endif  
 		}
 
 		for (int i = 0; i < nImgsize; i++)
@@ -1495,8 +1515,9 @@ void TOF316Acquisition::set_sleep()
 	has_sleep = 1;
 }
 
-void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map)
+int TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map)
 {
+	int ret = 0;
 	int i, j, index;
 	float dst = 0;
 	float max_dst = 0;
@@ -1507,7 +1528,7 @@ void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map)
 		max_dst = MAX_DIST_456;
 	}
 	max_dst = 3.5f;
-	if(pthread_id > 0) 
+	if(pthread_id > 0 && run_tof > 0) 
 	{
 		pthread_mutex_lock(&tof_buffer.lock);  
 		if (tof_buffer.writepos == tof_buffer.readpos)  
@@ -1535,10 +1556,17 @@ void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map)
 		pthread_cond_signal(&tof_buffer.notfull);  
 		pthread_mutex_unlock(&tof_buffer.lock);
 	}
+	else
+	{
+		LOG(ERROR) << "get tof data fail!";
+		ret = -1;
+	}
+	return ret;
 }
 
-void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map, long *stamp)
+int TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map, long *stamp)
 {
+	int ret = 0;
 	int i, j, index;
 	float dst = 0;
 	float max_dst = 0;
@@ -1549,12 +1577,12 @@ void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map, long *stamp)
 		max_dst = MAX_DIST_456;
 	}
 	max_dst = 3.5f;
-	if(pthread_id > 0) 
+	if(pthread_id > 0 && run_tof > 0) 
 	{
 		pthread_mutex_lock(&tof_buffer.lock);  
 		if (tof_buffer.writepos == tof_buffer.readpos)  
 		{  
-			pthread_cond_wait(&tof_buffer.notempty, &tof_buffer.lock);  
+			pthread_cond_wait(&tof_buffer.notempty, &tof_buffer.lock);
 		}
 		for(int i = 0; i < MAX_POINT_CLOUD && run_tof > 0; i++)
 		{
@@ -1578,11 +1606,18 @@ void TOF316Acquisition::get_tof_depth_map(cv::Mat &depth_map, long *stamp)
 		pthread_cond_signal(&tof_buffer.notfull);  
 		pthread_mutex_unlock(&tof_buffer.lock);
 	}
+	else
+	{
+		LOG(ERROR) << "get tof data fail!";
+		ret = -1;
+	}
+	return ret;
 }
 
-void TOF316Acquisition::get_tof_Z(unsigned char* addr)
+int TOF316Acquisition::get_tof_Z(unsigned char* addr)
 {
-	if(pthread_id > 0) 
+	int ret = 0;
+	if(pthread_id > 0 && run_tof > 0) 
 	{
 		pthread_mutex_lock(&tof_buffer.lock);  
 		if (tof_buffer.writepos == tof_buffer.readpos)  
@@ -1596,6 +1631,12 @@ void TOF316Acquisition::get_tof_Z(unsigned char* addr)
 		pthread_cond_signal(&tof_buffer.notfull);  
 		pthread_mutex_unlock(&tof_buffer.lock);
 	}
+	else
+	{
+		LOG(ERROR) << "get tof data fail!";
+		ret = -1;
+	}
+	return ret;
 }
 
 // void TOF316Acquisition::get_tof_pc(PointCloud &point_cloud)

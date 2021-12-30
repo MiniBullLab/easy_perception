@@ -38,14 +38,15 @@
 #ifndef __OVERLAY_TOOL_H__
 #define __OVERLAY_TOOL_H__
 
+//#define USE_OLD_REC
 //#define OLD_CODE
-#define IS_SHOW
+//#define IS_SHOW
 
 #ifndef STRING_SIZE
 #define STRING_SIZE				(256)
 #endif
 
-#define MAX_OVERLAY_PLATE_NUM		(30)
+#define MAX_OVERLAY_PLATE_NUM		(50)
 #define DEFAULT_OVERLAY_LICENSE_NUM	(8)
 #define MIN_OVERLAY_PLATE_NUM		(0)
 #define MIN_X_OFFSET			(0.0f)

@@ -308,6 +308,16 @@ static void *save_image_pthread(void* save_data)
 {
     unsigned long long int frame_number = 0;
     long stamp = 0;
+    int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
     prctl(PR_SET_NAME, "save_image_pthread");
     while(save_run) {
         pthread_mutex_lock(&image_buffer.lock);  
@@ -343,6 +353,16 @@ static void *save_tof_pthread(void* save_data)
 {
     unsigned long long int frame_number = 0;
     long stamp = 0;
+    int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
     prctl(PR_SET_NAME, "save_tof_pthread");
     while(save_run) {
 		pthread_mutex_lock(&tof_buffer.lock);  
@@ -389,6 +409,18 @@ static void *offline_image_pthread(void* save_data)
     long pre_stamp = 0;
     int sleep_time = 0;
     int base_time = 0;
+
+    int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
+
     ListImages(save_image_dir, data_list);
     image_count = data_list.size();
     offline_image_count = image_count;
@@ -477,6 +509,18 @@ static void *offline_tof_pthread(void* save_data)
     size_t tof_count = data_list.size() / 2 + 1;
     int base_time = 0;
     float count_ratio = 0;
+
+    int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
+
     if(tof_count == 0)
     {
         LOG(ERROR) << "offline tof data not exist:" << save_tof_dir;
@@ -560,11 +604,11 @@ static void *offline_tof_pthread(void* save_data)
 		pthread_cond_signal(&tof_buffer.notempty);  
 		pthread_mutex_unlock(&tof_buffer.lock); 
         time_end = gettimeus();
-        if(base_time > 0)
+        if(base_time >= 0)
             sleep_time = (base_time * 1000) - (time_end - time_start);
         LOG(INFO) << "offline get tof cost time: " <<  (time_end - time_start)/1000.0  << "ms sleep:" << sleep_time;
-        if(sleep_time <= 0)
-            sleep_time = 160;
+        if(sleep_time < 200)
+            sleep_time = 200;
         usleep(sleep_time);
         LOG(WARNING) << "offline tof all cost time: " <<  (gettimeus() - time_start)/1000.0  << "ms";
     }
@@ -773,7 +817,7 @@ int SaveDataProcess::video_stop()
 int SaveDataProcess::offline_start()
 {
     int ret = 0;
-    
+    struct sched_param param;
     save_run = 1;
 
     image_buffer.readpos = 0;  
@@ -782,7 +826,15 @@ int SaveDataProcess::offline_start()
     tof_buffer.readpos = 0;  
     tof_buffer.writepos = 0;
 
-    ret = pthread_create(&offline_tof_pthread_id, NULL, offline_tof_pthread, NULL);
+    pthread_attr_init(&tof_pthread_attr);
+    pthread_attr_init(&image_pthread_attr);
+
+	param.sched_priority = 51;
+	pthread_attr_setschedpolicy(&tof_pthread_attr, SCHED_RR);
+	pthread_attr_setschedparam(&tof_pthread_attr, &param);
+	pthread_attr_setinheritsched(&tof_pthread_attr, PTHREAD_EXPLICIT_SCHED);
+
+    ret = pthread_create(&offline_tof_pthread_id, &tof_pthread_attr, offline_tof_pthread, NULL);
     if(ret < 0)
     {
         save_run = 0;
@@ -791,7 +843,11 @@ int SaveDataProcess::offline_start()
     else
     {
         LOG(WARNING) << "start offline tof pthread:" << offline_tof_pthread_id;
-        ret = pthread_create(&offline_image_pthread_id, NULL, offline_image_pthread, NULL);
+        param.sched_priority = 51;
+	    pthread_attr_setschedpolicy(&image_pthread_attr, SCHED_RR);
+	    pthread_attr_setschedparam(&image_pthread_attr, &param);
+	    pthread_attr_setinheritsched(&image_pthread_attr, PTHREAD_EXPLICIT_SCHED);
+        ret = pthread_create(&offline_image_pthread_id, &image_pthread_attr, offline_image_pthread, NULL);
         if(ret < 0)
         {
             save_run = 0;
@@ -827,6 +883,8 @@ int SaveDataProcess::offline_stop()
 		pthread_join(offline_tof_pthread_id, NULL);
         offline_tof_pthread_id = 0;
 	}
+    pthread_attr_destroy(&tof_pthread_attr);
+    pthread_attr_destroy(&image_pthread_attr);
 	LOG(WARNING) << "stop offline data success";
 	return ret;
 }
@@ -946,7 +1004,11 @@ void SaveDataProcess::save_image(const cv::Mat &src_image, const long stamp)
     unsigned long time_start;
     std::stringstream filename_image;
     time_start = gettimeus();
+#if defined(OFFLINE_DATA)
+    filename_image << save_image_dir << "../" << stamp << ".jpg";
+#else
     filename_image << save_image_dir << stamp << ".jpg";
+#endif
     if(!src_image.empty())
     {
         std::vector<int> compression_params;

@@ -83,20 +83,44 @@ inline static size_t argmax(ForwardIterator first, ForwardIterator last) {
 
 TextLine RecNet::scoreToTextLine(const std::vector<float>& outputData, int h, int w) {
 	int keySize = CH_PLATE_CODE.size();
-	std::string strRes;
+	std::string strRes = "";
 	std::vector<float> scores;
 	int lastIndex = 0;
 	int maxIndex;
 	float maxValue;
+	int charCount = 0;
+	scores.clear();
+
+	// std::cout << "keySize:" << keySize << std::endl;
 
 	for (int i = 0; i < h; i++) {
 		maxIndex = 0;
 		maxValue = -1000.f;
 		maxIndex = int(argmax(outputData.begin() + i * w, outputData.begin() + i * w + w));
 		maxValue = float(*std::max_element(outputData.begin() + i * w, outputData.begin() + i * w + w));
-		if (maxIndex > 0 && maxIndex < keySize && (!(i > 0 && maxIndex == lastIndex))) {
-			scores.emplace_back(maxValue);
-			strRes.append(CH_PLATE_CODE[maxIndex - 1]);
+		if (maxIndex > 0 && maxIndex <= keySize && (!(i > 0 && maxIndex == lastIndex))) {
+			if(charCount == 0 && maxIndex <= 42)
+			{
+				scores.emplace_back(maxValue);
+				strRes.append(CH_PLATE_CODE[maxIndex - 1]);
+				charCount++;
+			}
+			else if(charCount == 1 && maxIndex >= 53 && maxIndex <= keySize)
+			{
+				scores.emplace_back(maxValue);
+				strRes.append(CH_PLATE_CODE[maxIndex - 1]);
+				charCount++;
+			}
+			else if(charCount > 1)
+			{
+				scores.emplace_back(maxValue);
+				strRes.append(CH_PLATE_CODE[maxIndex - 1]);
+				charCount++;
+			}
+			if(charCount >= 8)
+            {
+                break;
+            }
 		}
 		lastIndex = maxIndex;
 	}

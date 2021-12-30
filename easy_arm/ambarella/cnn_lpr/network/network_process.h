@@ -41,6 +41,8 @@ public:
 
     int send_save_data();
 
+    void send_post();
+
 private:
 
     

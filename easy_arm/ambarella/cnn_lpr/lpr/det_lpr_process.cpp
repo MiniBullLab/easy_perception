@@ -6,7 +6,7 @@
 #define DEFAULT_NMS_TOP_K			(100)
 #define DEFAULT_NMS_THRES			(0.45f)
 #define DEFAULT_SSD_CONF_THRES		(0.3f)
-#define DEFAULT_YOLOV5_CONF_THRES   (0.5f)
+#define DEFAULT_YOLOV5_CONF_THRES   (0.6f)
 
 const static std::string ssd_model_path = "/data/lpr/mobilenetv1_ssd_cavalry.bin";
 const static std::string ssd_priorbox_path = "/data/lpr/lpr_priorbox_fp32.bin";

@@ -12,6 +12,8 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/vfs.h>
 #include <stdint.h>
 #include <pthread.h>
 #include <semaphore.h>
@@ -76,5 +78,7 @@ int mat2tensor_yuv_nv12(cv::Mat &yuv_i420, ea_tensor_t *tensor);
 int create_yuv_nv12_tensor(const unsigned char* addr, const int width, const int height, ea_tensor_t *tensor);
 
 void fill_data(unsigned char* addr, int data);
+
+int get_system_tf_free(const std::string &dir_path, size_t *mb_freedisk);
 
 #endif // _COMMON_PROCESS_H_

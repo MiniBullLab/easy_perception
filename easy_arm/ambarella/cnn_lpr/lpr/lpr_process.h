@@ -7,7 +7,7 @@
 
 #include "cnn_lpr/clustering/clustering_rect.h"
 
-#if defined(OLD_CODE)
+#if defined(OLD_CODE) || defined(USE_OLD_REC)
 #define DEFAULT_LPR_CONF_THRES		(0.9f)
 #else
 #define DEFAULT_LPR_CONF_THRES		(0.5f)

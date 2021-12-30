@@ -358,7 +358,7 @@ static void * show_overlay_thread(void* overlay_thread_param)
 				overlay_ctx.bbox_list.bbox[i].norm_max_x - overlay_ctx.bbox_list.bbox[i].norm_min_x,
 				overlay_ctx.bbox_list.bbox[i].norm_max_y - overlay_ctx.bbox_list.bbox[i].norm_min_y));
 		}
-#if !defined(OLD_CODE)
+#if !defined(OLD_CODE) && !defined(USE_OLD_REC)
 		//landmark
 		ea_display_obj_params(overlay_ctx.display)->border_thickness = 1;
 		for (i = 0; i < overlay_ctx.bbox_list.bbox_num; i++) {

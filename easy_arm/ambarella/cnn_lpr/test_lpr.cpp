@@ -34,7 +34,7 @@
 #define TIME_MEASURE_LOOPS			(20)
 
 #define IS_LPR_RUN
-#define IS_CAR_RUN
+//#define IS_CAR_RUN
 #define IS_PC_RUN
 
 #if defined(OLD_CODE)
@@ -72,6 +72,18 @@ static void *send_tof_pthread(void *thread_params)
 	int length = 0;
 	long time_stamp = 0;
 	int data_type = 0, width = 0, height = 0;
+
+	int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
+
 	prctl(PR_SET_NAME, "send_tof_pthread");
 	tof_geter.set_up();
 	while(run_flag)
@@ -113,6 +125,18 @@ static void *send_yuv_pthread(void *thread_params)
 	int length = 0;
 	long time_stamp = 0;
 	int data_type = 0, width = 0, height = 0;
+
+	int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
+
 	prctl(PR_SET_NAME, "send_yuv_pthread");
 	while(run_flag)
 	{
@@ -148,7 +172,8 @@ static void *send_yuv_pthread(void *thread_params)
 
 #endif
 
-static int send_count = 0;
+static int in_send_count = 0;
+static int out_send_count = 0;
 
 static void merge_all_result(const int in_out_result)
 {
@@ -158,6 +183,8 @@ static void merge_all_result(const int in_out_result)
 	float car_sum = 0;
 	float lpr_sum = 0;
 	bbox_list_t result_bbox;
+	result_bbox.bbox_num = 0;
+#if defined(IS_CAR_RUN)
 	if(list_has_car.bbox_num >= 3)
 	{
 		car_sum = 0;
@@ -176,110 +203,129 @@ static void merge_all_result(const int in_out_result)
 		}
 		LOG(WARNING) << "has_car: " << has_car << " " << car_sum;
 	}
+#endif
 	if(list_lpr_bbox.bbox_num >= 3)
+	{
+		LOG(WARNING) << "input bbox: " <<  list_lpr_bbox.bbox_num;
+		bbox_list_process(&list_lpr_bbox, &result_bbox);
+		LOG(WARNING) << "result bbox: " << result_bbox.bbox_num;
+		// for (int i = 0; i < list_lpr_bbox.bbox_num; ++i) {
+		// 	list_lpr_bbox.bbox[i].norm_min_x = list_lpr_bbox.bbox[i].norm_min_x / IMAGE_WIDTH;
+		// 	list_lpr_bbox.bbox[i].norm_min_y = list_lpr_bbox.bbox[i].norm_min_y / IMAGE_HEIGHT;
+		// 	list_lpr_bbox.bbox[i].norm_max_x = list_lpr_bbox.bbox[i].norm_max_x / IMAGE_WIDTH;
+		// 	list_lpr_bbox.bbox[i].norm_max_y = list_lpr_bbox.bbox[i].norm_max_y / IMAGE_HEIGHT;
+		// }
+		// for (int i = 0; i < result_bbox.bbox_num; ++i) {
+		// 	result_bbox.bbox[i].norm_min_x = result_bbox.bbox[i].norm_min_x / IMAGE_WIDTH;
+		// 	result_bbox.bbox[i].norm_min_y = result_bbox.bbox[i].norm_min_y / IMAGE_HEIGHT;
+		// 	result_bbox.bbox[i].norm_max_x = result_bbox.bbox[i].norm_max_x / IMAGE_WIDTH;
+		// 	result_bbox.bbox[i].norm_max_y = result_bbox.bbox[i].norm_max_y / IMAGE_HEIGHT;
+		// }
+		// set_overlay_bbox(&list_lpr_bbox);
+		// set_car_bbox(&result_bbox);
+		// show_overlay(0);
+	}
+	if(list_has_lpr.bbox_num > 20)
 	{
 		lpr_sum = 0;
 		for (int i = 0; i < list_has_lpr.bbox_num; i++)
 		{
 			lpr_sum += list_has_lpr.has[i];
 		}
-		if(list_has_lpr.bbox_num > 10)
+		lpr_sum = lpr_sum / list_has_lpr.bbox_num;
+		if(lpr_sum > 0.5f)
 		{
-			lpr_sum = lpr_sum / list_has_lpr.bbox_num;
-			if(lpr_sum > 0.5f)
-			{
-				lpr_in_out = 1;
-			}
-			else
-			{
-				lpr_in_out = 2;
-			}
+			lpr_in_out = 1;
+		}
+		else if(lpr_sum > 0)
+		{
+			lpr_in_out = 2;
 		}
 		LOG(WARNING) << "lpr_in_out: " << lpr_in_out << " " << lpr_sum;
 	}
 
-	LOG(WARNING) << "input bbox: " <<  list_lpr_bbox.bbox_num;
-	bbox_list_process(&list_lpr_bbox, &result_bbox);
-	LOG(WARNING) << "result bbox: " << result_bbox.bbox_num;
-	
-	// for (int i = 0; i < list_lpr_bbox.bbox_num; ++i) {
-	// 	list_lpr_bbox.bbox[i].norm_min_x = list_lpr_bbox.bbox[i].norm_min_x / IMAGE_WIDTH;
-	// 	list_lpr_bbox.bbox[i].norm_min_y = list_lpr_bbox.bbox[i].norm_min_y / IMAGE_HEIGHT;
-	// 	list_lpr_bbox.bbox[i].norm_max_x = list_lpr_bbox.bbox[i].norm_max_x / IMAGE_WIDTH;
-	// 	list_lpr_bbox.bbox[i].norm_max_y = list_lpr_bbox.bbox[i].norm_max_y / IMAGE_HEIGHT;
-	// }
-	// for (int i = 0; i < result_bbox.bbox_num; ++i) {
-	// 	result_bbox.bbox[i].norm_min_x = result_bbox.bbox[i].norm_min_x / IMAGE_WIDTH;
-	// 	result_bbox.bbox[i].norm_min_y = result_bbox.bbox[i].norm_min_y / IMAGE_HEIGHT;
-	// 	result_bbox.bbox[i].norm_max_x = result_bbox.bbox[i].norm_max_x / IMAGE_WIDTH;
-	// 	result_bbox.bbox[i].norm_max_y = result_bbox.bbox[i].norm_max_y / IMAGE_HEIGHT;
-	// }
-	// set_overlay_bbox(&list_lpr_bbox);
-	// set_car_bbox(&result_bbox);
-	// show_overlay(0);
-
 	if(final_result > 0)
 	{
-		if(send_count == 0 && final_result == 2)
+		if(in_send_count == 0 && final_result == 2)
 		{
 			return;
 		}
-		if(send_count >= 1 && result_bbox.bbox_num == 1)
+		if(in_send_count == 1 && final_result == 1 && result_bbox.bbox_num == 1)
 		{
 			return;
 		}
 		if(lpr_result != "" && lpr_confidence > 0)
 		{
+			LOG(WARNING) << "lpr_confidence:" << lpr_confidence; 
 			network_process.send_result(lpr_result, final_result);
 			lpr_result = "";
 			lpr_confidence = 0;
-			send_count = 1;
+			if(final_result == 1)
+			{
+				in_send_count = 1;
+			}
+			else
+			{
+				out_send_count = 1;
+			}
 		}
-		else if(has_car > 0 && final_result == 1)
+		else if(lpr_in_out > 0 && final_result == 1)
 		{
 			network_process.send_result("001", 3);
-			send_count = 1;
+			in_send_count = 1;
 		}
-		else if(has_car > 0 && final_result == 2)
+		else if(lpr_in_out > 0 && final_result == 2)
 		{
 			network_process.send_result("001", 4);
+			out_send_count = 1;
 		}
 
-		if(final_result == 2)
+		if(final_result == 2 || out_send_count == 1)
 		{
-			send_count = 0;
+			in_send_count = 0;
+			out_send_count = 0;
 		}
 	}
 	else if(lpr_in_out > 0)
 	{
-		if(send_count == 0 && lpr_in_out == 2)
+		if(in_send_count == 0 && lpr_in_out == 2)
 		{
 			return;
 		}
-		if(send_count >= 1 && result_bbox.bbox_num == 1)
+		if(in_send_count == 1 && lpr_in_out == 1 && result_bbox.bbox_num == 1)
 		{
 			return;
 		}
 		if(lpr_result != "" && lpr_confidence > 0)
 		{
+			LOG(WARNING) << "lpr_confidence:" << lpr_confidence; 
 			network_process.send_result(lpr_result, lpr_in_out);
 			lpr_result = "";
 			lpr_confidence = 0;
-			send_count = 1;
+			if(lpr_in_out == 1)
+			{
+				in_send_count = 1;
+			}
+			else
+			{
+				out_send_count = 1;
+			}
 		}
-		else if(has_car > 0 && lpr_in_out == 1)
+		else if(lpr_in_out == 1)
 		{
 			network_process.send_result("001", 3);
-			send_count = 1;
+			in_send_count = 1;
 		}
-		else if(has_car > 0 && lpr_in_out == 2)
+		else if(lpr_in_out == 2)
 		{
 			network_process.send_result("001", 4);
+			out_send_count = 1;
 		}
 
-		if(lpr_in_out == 2)
+		if(out_send_count == 1)
 		{
-			send_count = 0;
+			in_send_count = 0;
+			out_send_count = 0;
 		}
 	}
 
@@ -708,6 +754,194 @@ static void *run_det_lpr_pthread(void *thread_params)
 
 #else
 
+#if defined(USE_OLD_REC)
+static void *run_lpr_pthread(void *param_thread)
+{
+	int rval;
+	lpr_thread_params_t *lpr_param =
+		(lpr_thread_params_t*)param_thread;
+	global_control_param_t *G_param = lpr_param->G_param;
+	LPR_ctx_t LPR_ctx;
+
+	// Detection result param
+	bbox_param_t bbox_param[MAX_DETECTED_LICENSE_NUM];
+	draw_plate_list_t draw_plate_list;
+	uint16_t license_num = 0;
+	license_list_t license_result;
+	state_buffer_t *ssd_mid_buf;
+	ea_img_resource_data_t * data = NULL;
+	ea_tensor_t *img_tensor = NULL;
+
+	// Time mesurement
+	uint64_t start_time = 0;
+	uint64_t debug_time = 0;
+	float sum_time = 0.0f;
+	float average_license_num = 0.0f;
+	uint32_t loop_count = 1;
+	uint32_t debug_en = G_param->debug_en;
+
+	int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
+
+	list_lpr_bbox.bbox_num = 0;
+
+	std::cout << "lpr size:" << lpr_param->width << " " << lpr_param->height << " " << lpr_param->pitch << std::endl;
+
+	prctl(PR_SET_NAME, "lpr_pthread");
+
+	do {
+		memset(&LPR_ctx, 0, sizeof(LPR_ctx));
+		memset(&draw_plate_list, 0, sizeof(draw_plate_list));
+		memset(&bbox_param, 0, sizeof(bbox_param));
+
+		LPR_ctx.img_h = lpr_param->height;
+		LPR_ctx.img_w = lpr_param->width;
+		RVAL_OK(init_LPR(&LPR_ctx, G_param));
+		RVAL_OK(alloc_single_state_buffer(&G_param->ssd_result_buf, &ssd_mid_buf));
+
+		while (run_flag) {
+#if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
+			while(run_lpr > 0)
+#endif
+			{
+				if(lpr_critical_resource(&license_num, bbox_param, ssd_mid_buf, G_param) < 0)
+					continue;
+				start_time = gettimeus();
+				data = (ea_img_resource_data_t *)ssd_mid_buf->img_resource_addr;
+				if (license_num == 0) {
+#if defined(OFFLINE_DATA)
+					for (int i = 0; i < data->tensor_num; i++) {
+						if (data->tensor_group[i]) {
+							ea_tensor_free(data->tensor_group[i]);
+							data->tensor_group[i] = NULL;
+						}
+					}
+					free(data->tensor_group);
+					data->tensor_group = NULL;
+					data->led_group = NULL;
+#else
+					RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
+#endif
+					continue;
+				}
+				img_tensor = data->tensor_group[DEFAULT_LPR_LAYER_ID];
+				// if (G_param->abort_if_preempted) {
+				// 	pthread_mutex_lock(&G_param->vp_access_lock);
+				// }
+				RVAL_OK(LPR_run_vp_preprocess(&LPR_ctx, img_tensor, license_num, (void*)bbox_param));
+				// if (G_param->abort_if_preempted) {
+				// 	pthread_mutex_unlock(&G_param->vp_access_lock); // unlock to let SSD run during LPR ARM time
+				// }
+
+				RVAL_OK(LPR_run_arm_preprocess(&LPR_ctx, license_num));
+				// if (G_param->abort_if_preempted) {
+				// 	pthread_mutex_lock(&G_param->vp_access_lock);
+				// }
+				RVAL_OK(LPR_run_vp_recognition(&LPR_ctx, license_num, &license_result));
+#ifdef IS_SHOW
+				draw_overlay_preprocess(&draw_plate_list, &license_result, bbox_param, debug_en);
+				TIME_MEASURE_START(debug_en);
+				RVAL_OK(set_overlay_image(img_tensor, &draw_plate_list));
+				TIME_MEASURE_END("[LPR] LPR draw overlay time", debug_en);
+#endif
+				// if (G_param->abort_if_preempted) {
+				// 	pthread_mutex_unlock(&G_param->vp_access_lock);
+				// }
+
+				if(license_result.license_num > 0)
+				{
+					size_t char_len = strlen(license_result.license_info[0].text);
+					LOG(INFO) << "LPR:"  << license_result.license_info[0].text << " " \
+								<< license_result.license_info[0].conf << " "
+								<< char_len;
+					if (license_result.license_info[0].conf > DEFAULT_LPR_CONF_THRES && \
+						(char_len == 9 || char_len == 10))
+						{
+							LOG(WARNING) << "LPR: info "  << license_result.license_info[0].text << " " \
+							<< license_result.license_info[0].conf;
+							pthread_mutex_lock(&result_mutex);
+							if(license_result.license_info[0].conf > lpr_confidence)
+							{
+								lpr_result = license_result.license_info[0].text;
+								lpr_confidence = license_result.license_info[0].conf;
+								LOG(WARNING) << "LPR:"  << lpr_result << " " << lpr_confidence;
+							}
+							bbox_param_t lpr_bbox = {0};
+							lpr_bbox.norm_min_x = bbox_param[0].norm_min_x * lpr_param->width;
+							lpr_bbox.norm_min_y = bbox_param[0].norm_min_y * lpr_param->height;
+							lpr_bbox.norm_max_x = bbox_param[0].norm_max_x * lpr_param->width;
+							lpr_bbox.norm_max_y = bbox_param[0].norm_max_y * lpr_param->height;
+							if(list_lpr_bbox.bbox_num < MAX_OVERLAY_PLATE_NUM)
+							{
+								list_lpr_bbox.bbox[list_lpr_bbox.bbox_num++] = lpr_bbox;
+							}
+							else
+							{
+								LOG(INFO) << "not add lpr bbox";
+							}
+							LOG(INFO) << "LPR bbox: " << lpr_bbox.norm_min_x << " " \
+														<< lpr_bbox.norm_min_y << " " \
+														<< lpr_bbox.norm_max_x << " " \
+														<< lpr_bbox.norm_max_y;
+							pthread_mutex_unlock(&result_mutex);
+						}
+				}
+				
+#if defined(OFFLINE_DATA)
+				for (int i = 0; i < data->tensor_num; i++) {
+					if (data->tensor_group[i]) {
+						ea_tensor_free(data->tensor_group[i]);
+						data->tensor_group[i] = NULL;
+					}
+				}
+				free(data->tensor_group);
+				data->tensor_group = NULL;
+				data->led_group = NULL;
+#else
+				RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, data));
+#endif
+				sum_time += (gettimeus() - start_time);
+				++loop_count;
+				average_license_num += license_num;
+				if (loop_count == TIME_MEASURE_LOOPS) {
+					float average_time1 = sum_time / (1000 * TIME_MEASURE_LOOPS);
+					float average_time2 = (average_license_num > 0.0f) ? (sum_time / (1000 * average_license_num)) : 0.0f;
+					LOG(INFO) << "[" << TIME_MEASURE_LOOPS  << "loops] LPR average time license_num " << " " << average_license_num / TIME_MEASURE_LOOPS;
+					LOG(WARNING) << "LPR average time:"<< average_time1 << " per license cost time:" << average_time2;
+					sum_time = 0;
+					loop_count = 1;
+					average_license_num = license_num;
+				}
+			}
+#if defined(IS_PC_RUN) && defined(IS_LPR_RUN)
+			lpr_result = "";
+			lpr_confidence = 0;
+			list_lpr_bbox.bbox_num = 0;
+			usleep(20000);
+#endif
+		}
+	} while (0);
+	do {
+		network_process.send_error(15);
+		run_flag = 0;
+		free_single_state_buffer(ssd_mid_buf);
+		LPR_deinit(&LPR_ctx);
+		LOG(WARNING) << "LPR thread quit.";
+	} while (0);
+
+	return NULL;
+}
+
+#else
+
 static void *run_lpr_pthread(void *param_thread)
 {
 	int rval;
@@ -738,6 +972,17 @@ static void *run_lpr_pthread(void *param_thread)
 	cv::Mat bgr;
 	std::vector<cv::Point2f> polygon;
 	float char_score = 0;
+
+	int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
 
 	list_lpr_bbox.bbox_num = 0;
 
@@ -800,7 +1045,7 @@ static void *run_lpr_pthread(void *param_thread)
 				                            bbox_param[0].p2_y*bgr.rows));
 				cv::Mat roi = rec_net.cropImageROI(bgr, polygon);
 				TIME_MEASURE_END("[LPR] LPR crop roi cost time", debug_en);
-				save_process.save_image(roi, start_time);
+				// save_process.save_image(roi, start_time);
 
 				TIME_MEASURE_START(debug_en);
 				TextLine textLine = rec_net.getTextLine(roi);
@@ -813,7 +1058,10 @@ static void *run_lpr_pthread(void *param_thread)
 				memset(license_result.license_info[0].text, 0, sizeof(license_result.license_info[0].text));
 				snprintf(license_result.license_info[0].text, sizeof(license_result.license_info[0].text),
 					"%s", textLine.text.c_str());
-				license_result.license_info[0].conf = char_score / textLine.charScores.size();
+				if(textLine.charScores.size() > 0)
+					license_result.license_info[0].conf = char_score / textLine.charScores.size();
+				else
+					license_result.license_info[0].conf = 0;
 				++license_result.license_num;
 
 				TIME_MEASURE_END("[LPR] LPR network cost time", debug_en);
@@ -831,6 +1079,8 @@ static void *run_lpr_pthread(void *param_thread)
 				if (license_result.license_info[0].conf > DEFAULT_LPR_CONF_THRES && \
 					(char_len == 9 || char_len == 10))
 					{
+						LOG(WARNING) << "LPR: info "  << license_result.license_info[0].text << " " \
+							<< license_result.license_info[0].conf;
 						pthread_mutex_lock(&result_mutex);
 						if(license_result.license_info[0].conf > lpr_confidence)
 						{
@@ -893,6 +1143,7 @@ static void *run_lpr_pthread(void *param_thread)
 		}
 	} while (0);
 	do {
+		network_process.send_error(15);
 		run_flag = 0;
 		free_single_state_buffer(ssd_mid_buf);
 		LOG(WARNING) << "LPR thread quit.";
@@ -900,6 +1151,8 @@ static void *run_lpr_pthread(void *param_thread)
 
 	return NULL;
 }
+
+#endif
 
 static void *run_det_lpr_pthread(void *thread_params)
 {
@@ -928,6 +1181,17 @@ static void *run_det_lpr_pthread(void *thread_params)
 	float sum_time = 0.0f;
 	uint32_t loop_count = 1;
 	uint32_t debug_en = G_param->debug_en;
+
+	int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
 
 	uint32_t list_index = 0;
 	list_has_lpr.bbox_num = 0;
@@ -1107,6 +1371,8 @@ static void *run_det_lpr_pthread(void *thread_params)
 				continue;
 			}
 			has_lpr = 0;
+			list_index = 0;
+			list_has_lpr.bbox_num = 0;
 			TIME_MEASURE_END("[det_lpr] get yuv cost time", debug_en);
 #elif defined(IS_PC_RUN) && defined(IS_LPR_RUN)
             has_lpr = 0;
@@ -1118,6 +1384,7 @@ static void *run_det_lpr_pthread(void *thread_params)
 	} while (0);
 	do {
 		run_flag = 0;
+		network_process.send_error(14);
 		yolov5_deinit(&yolov5_ctx);
 		free_single_state_buffer(ssd_mid_buf);
 		LOG(WARNING) << "det_lpr thread quit.";
@@ -1167,6 +1434,17 @@ static void *run_denet_pthread(void *thread_params)
 #elif IMAGE_HEIGHT == 720
 	std::vector<float> roi = {350, 630};
 #endif
+
+	int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
 
 #if defined(OFFLINE_DATA)
 	ea_tensor_t **tensors = NULL;
@@ -1326,39 +1604,22 @@ static void *run_denet_pthread(void *thread_params)
 		usleep(20000);
 #endif
 	}
-	network_process.send_error(12);
+	network_process.send_error(13);
 	run_denet = 0;
 	LOG(WARNING) << "run_denet_pthread quit！";
 	return NULL;
 }
 
-static void *process_recv_pthread(void *thread_params)
+static void *process_pc_pthread(void *thread_params)
 {
-	uint64_t debug_time = 0;
-	prctl(PR_SET_NAME, "process_recv_pthread");
-	while(run_flag)
-	{
-		int result = network_process.process_recv();
-		if(result == 200)
-		{
-			run_lpr = 0;
-			run_denet = 0;
-			run_flag = 0;
-#if defined(OFFLINE_DATA)
-			save_process.offline_stop();
-#endif
-		}
-	}
-	LOG(WARNING) << "process_recv_pthread quit！";
-	return NULL;
-}
-
-static void process_pc_pthread(const global_control_param_t *G_param)
-{
+	int rval = 0;
 	uint64_t start_time = 0;
 	float sum_time = 0.0f;
 	float average_license_num = 0.0f;
 	uint32_t loop_count = 1;
+
+	global_control_param_t *G_param =
+		(global_control_param_t*)thread_params;
 	
 	uint64_t debug_time = 0;
 	uint32_t debug_en = G_param->debug_en;
@@ -1371,6 +1632,7 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 	cv::Mat filter_map;
 	long pre_stamp = 0;
 	long stamp = 0;
+	cv::Mat filter_pre_map;
 	cv::Mat pre_map;
 	cv::Mat bg_map = cv::Mat::zeros(cv::Size(DEPTH_WIDTH, DEPTH_HEIGTH),CV_8UC1);
 	cv::Mat depth_map = cv::Mat::zeros(cv::Size(DEPTH_WIDTH, DEPTH_HEIGTH),CV_8UC1);
@@ -1379,6 +1641,17 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 	cv::Mat img_bgmodel;
 	cv::Mat img_output;
 	IBGS *bgs = new ViBeBGS();
+
+	int policy = -1;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(),&policy,&param);
+    if(policy == SCHED_OTHER)
+		LOG(WARNING) << "SCHED_OTHER";
+    if(policy == SCHED_RR)
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
 
 #if !defined(IS_LPR_RUN)
 	lpr_confidence = 1;
@@ -1397,6 +1670,10 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 	cv::GaussianBlur(depth_map, bg_map, cv::Size(9, 9), 3.5, 3.5);
 	cv::imwrite("./bg.png", bg_map);
 
+	pre_map = depth_map.clone();
+
+	prctl(PR_SET_NAME, "process_pc_pthread");
+
 	while(run_flag > 0)
 	{
 		start_time = gettimeus();
@@ -1404,7 +1681,12 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 #if defined(OFFLINE_DATA)
 		save_process.get_tof_depth_map(depth_map);
 #else
-		tof_geter.get_tof_depth_map(depth_map, &stamp);
+		rval = tof_geter.get_tof_depth_map(depth_map, &stamp);
+		if(rval < 0)
+		{
+			network_process.send_error(12);
+			break;
+		}
 #endif
 		TIME_MEASURE_END("[point_cloud] get TOF cost time", debug_en);
 
@@ -1454,6 +1736,12 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 			// if(has_lpr == 1)
 			{
 				// point_cout_list.push_back(bg_point_count);
+				if(point_cout_list.size() == 0)
+				{
+					cv::GaussianBlur(pre_map, filter_pre_map, cv::Size(9, 9), 3.5, 3.5);
+					int point_count = compute_depth_map(bg_map, filter_pre_map);
+					point_cout_list.push_back(point_count);
+				}
 				int point_count = compute_depth_map(bg_map, filter_map);
 				point_cout_list.push_back(point_count);
 				LOG(WARNING) << "point_count:" << point_count;
@@ -1471,13 +1759,13 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 				int point_count = compute_depth_map(bg_map, filter_map);
 				int in_out_result = vote_in_out(point_cout_list);
 				LOG(WARNING) << "final point_count:" << point_count << " " << in_out_result;
-				if(in_out_result == 1 && point_count >= 400)
+				if(in_out_result == 1 && point_count < 100)
 				{
-					in_out_result = 1;
+					in_out_result = 0;
 				}
-				else if(in_out_result == 1 && point_count < 100)
+				else if(in_out_result == 2 && point_count >= 400)
 				{
-					in_out_result = 2;
+					in_out_result = 0;
 				}
 				LOG(WARNING) << "in_out_result:" << in_out_result;
 				pthread_mutex_lock(&result_mutex);
@@ -1507,7 +1795,7 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 		}
 		TIME_MEASURE_END("[point_cloud] process cost time", debug_en);
 
-		if(process_number % 10 == 0)
+		if(process_number % 2 == 0)
 		{
 			pre_map = depth_map.clone();
 			pre_stamp = stamp;
@@ -1522,27 +1810,39 @@ static void process_pc_pthread(const global_control_param_t *G_param)
 			loop_count = 1;
 		}
 	}
+	network_process.send_error(16);
 	run_lpr = 0;
 	run_denet = 0;
 	run_flag = 0;
 	delete bgs;
     bgs = NULL;
-	LOG(WARNING) << "stop point cloud process";
+	LOG(WARNING) << "process_pc_pthread quit！";
+	return NULL;
 }
 
 static int start_all(global_control_param_t *G_param)
 {
 	int rval = 0;
-	pthread_t process_recv_pthread_id = 0;
-	pthread_t denet_pthread_id = 0;
+
+	size_t mb_freedisk = 0;
+
 	pthread_t det_lpr_pthread_id = 0;
 	pthread_t lpr_pthread_id = 0;
+	pthread_t denet_pthread_id = 0;
+	pthread_t process_pc_pthread_id = 0;
 	lpr_thread_params_t lpr_thread_params;
 	lpr_thread_params_t det_lpr_thread_params;
 	lpr_thread_params_t denet_thread_param;
 
 	ea_tensor_t *img_tensor = NULL;
 	ea_img_resource_data_t data;
+
+	struct sched_param param;
+    pthread_attr_t lpr_attr, det_lpr_attr, denet_attr, pc_attr;
+	pthread_attr_init(&lpr_attr);
+    pthread_attr_init(&det_lpr_attr);
+	pthread_attr_init(&denet_attr);
+	pthread_attr_init(&pc_attr);
 
 	if(network_process.start() < 0)
 	{
@@ -1587,6 +1887,7 @@ static int start_all(global_control_param_t *G_param)
 // 		LOG(INFO) << "start image success";
 // 	}
 // #endif
+
 #endif
 
 	do {
@@ -1612,24 +1913,60 @@ static int start_all(global_control_param_t *G_param)
 		det_lpr_thread_params.G_param = G_param;
 		RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, &data));
 #if defined(IS_LPR_RUN)
-		rval = pthread_create(&det_lpr_pthread_id, NULL, run_det_lpr_pthread, (void*)&det_lpr_thread_params);
+		param.sched_priority = 31;
+		pthread_attr_setschedpolicy(&det_lpr_attr, SCHED_RR);
+		pthread_attr_setschedparam(&det_lpr_attr, &param);
+		pthread_attr_setinheritsched(&det_lpr_attr, PTHREAD_EXPLICIT_SCHED);
+		rval = pthread_create(&det_lpr_pthread_id, &det_lpr_attr, run_det_lpr_pthread, (void*)&det_lpr_thread_params);
 		RVAL_ASSERT(rval == 0);
-		rval = pthread_create(&lpr_pthread_id, NULL, run_lpr_pthread, (void*)&lpr_thread_params);
+		param.sched_priority = 31;
+		pthread_attr_setschedpolicy(&lpr_attr, SCHED_RR);
+		pthread_attr_setschedparam(&lpr_attr, &param);
+		pthread_attr_setinheritsched(&lpr_attr, PTHREAD_EXPLICIT_SCHED);
+		rval = pthread_create(&lpr_pthread_id, &lpr_attr, run_lpr_pthread, (void*)&lpr_thread_params);
 		RVAL_ASSERT(rval == 0);
 #endif
 
 #if defined(IS_CAR_RUN)
-		rval = pthread_create(&denet_pthread_id, NULL, run_denet_pthread, (void*)&denet_thread_param);
+		param.sched_priority = 31;
+		pthread_attr_setschedpolicy(&denet_attr, SCHED_RR);
+		pthread_attr_setschedparam(&denet_attr, &param);
+		pthread_attr_setinheritsched(&denet_attr, PTHREAD_EXPLICIT_SCHED);
+		rval = pthread_create(&denet_pthread_id, &denet_attr, run_denet_pthread, (void*)&denet_thread_param);
 		RVAL_ASSERT(rval == 0);
 #endif
-		rval = pthread_create(&process_recv_pthread_id, NULL, process_recv_pthread, NULL);
+
+#if defined(IS_PC_RUN)
+		param.sched_priority = 31;
+		pthread_attr_setschedpolicy(&pc_attr, SCHED_RR);
+		pthread_attr_setschedparam(&pc_attr, &param);
+		pthread_attr_setinheritsched(&pc_attr, PTHREAD_EXPLICIT_SCHED);
+		rval = pthread_create(&process_pc_pthread_id, &pc_attr, process_pc_pthread, (void*)G_param);
 		RVAL_ASSERT(rval == 0);
+#endif
 	} while (0);
 	LOG(INFO) << "start_ssd_lpr success";
 
-#if defined(IS_PC_RUN)
-	process_pc_pthread(G_param);
-#endif
+	while(run_flag)
+	{
+		int result = network_process.process_recv();
+		mb_freedisk = 0;
+		if(get_system_tf_free("/data", &mb_freedisk) == 0)
+		{
+			LOG(WARNING) << "free disk:" << mb_freedisk << "MB";
+			if(mb_freedisk < 10)
+			{
+				network_process.send_error(18);
+			}
+		}
+		if(result == 200)
+		{
+			run_lpr = 0;
+			run_denet = 0;
+			run_flag = 0;
+		}
+	}
+	LOG(WARNING) << "process_recv quit！";
 
 	if (lpr_pthread_id > 0) {
 		pthread_join(lpr_pthread_id, NULL);
@@ -1646,6 +1983,15 @@ static int start_all(global_control_param_t *G_param)
 		denet_pthread_id = 0;
 	}
 	LOG(WARNING) << "denet pthread release";
+	if (process_pc_pthread_id > 0) {
+		pthread_join(process_pc_pthread_id, NULL);
+		process_pc_pthread_id = 0;
+	}
+	LOG(WARNING) << "PC pthread release";
+	pthread_attr_destroy(&lpr_attr);
+    pthread_attr_destroy(&det_lpr_attr);
+	pthread_attr_destroy(&denet_attr);
+	pthread_attr_destroy(&pc_attr);
 #if defined(OFFLINE_DATA)
 	save_process.offline_stop();
 #else
@@ -1656,10 +2002,6 @@ static int start_all(global_control_param_t *G_param)
 	save_process.stop();
 #endif
 	network_process.stop();
-	if (process_recv_pthread_id > 0) {
-		pthread_join(process_recv_pthread_id, NULL);
-		process_recv_pthread_id = 0;
-	}
 	LOG(WARNING) << "process_recv_pthread pthread release";
 	pthread_mutex_destroy(&result_mutex);
 	LOG(WARNING) << "Main thread quit";
@@ -1673,15 +2015,16 @@ static void *run_tof_pthread(void *thread_params)
 	long stamp = 0;
 	//unsigned char tof_data[TOF_SIZE];
 	cv::Mat depth_map = cv::Mat::zeros(cv::Size(DEPTH_WIDTH, DEPTH_HEIGTH),CV_8UC1);
-	int policy;
+	int policy = -1;
     struct sched_param param;
     pthread_getschedparam(pthread_self(),&policy,&param);
     if(policy == SCHED_OTHER)
-        printf("SCHED_OTHER\n");
+		LOG(WARNING) << "SCHED_OTHER";
     if(policy == SCHED_RR)
-    	printf("SCHED_RR \n");
-    if(policy == SCHED_FIFO)
-        printf("SCHED_FIFO\n");
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
 	prctl(PR_SET_NAME, "run_tof_pthread");
 	tof_geter.set_up();
 	while(run_flag)
@@ -1703,16 +2046,16 @@ static void *run_image_pthread(void *thread_params)
 	uint64_t debug_time = 0;
 	long stamp = 0;
 	// unsigned char yuv_data[IMAGE_YUV_SIZE] = {0};
-	int policy;
+	int policy = -1;
     struct sched_param param;
     pthread_getschedparam(pthread_self(),&policy,&param);
-	std::cout << "policy:" << policy << std::endl;
     if(policy == SCHED_OTHER)
-        printf("SCHED_OTHER\n");
+		LOG(WARNING) << "SCHED_OTHER";
     if(policy == SCHED_RR)
-    	printf("SCHED_RR\n");
-    if(policy == SCHED_FIFO)
-        printf("SCHED_FIFO\n");
+		LOG(WARNING) << "SCHED_RR";
+    if(policy==SCHED_FIFO)
+		LOG(WARNING) << "SCHED_FIFO";
+	LOG(WARNING) << "sched_priority:" << param.sched_priority;
 	prctl(PR_SET_NAME, "run_image_pthread");
 	while(run_flag)
 	{
@@ -1756,6 +2099,7 @@ static void sigstop(int signal_number)
 	run_lpr = 0;
 	run_denet = 0;
 	run_flag = 0;
+	network_process.send_post();
 #if defined(OFFLINE_DATA)
 	save_process.offline_stop();
 #endif
@@ -1764,10 +2108,11 @@ static void sigstop(int signal_number)
 
 static void SignalHandle(const char* data, int size) {
     std::string str = data;
-	network_process.send_error(18);
+	network_process.send_error(19);
 	run_lpr = 0;
 	run_denet = 0;
 	run_flag = 0;
+	network_process.send_post();
 #if defined(OFFLINE_DATA)
 	save_process.offline_stop();
 #endif
@@ -1805,6 +2150,11 @@ int main(int argc, char **argv)
 #if defined(ONLY_SAVE_DATA)
     pthread_t tof_pthread_id = 0;
 	pthread_t image_pthread_id = 0;
+	struct sched_param param;
+	pthread_attr_t tof_pthread_attr;
+    pthread_attr_t image_pthread_attr;
+	pthread_attr_init(&tof_pthread_attr);
+    pthread_attr_init(&image_pthread_attr);
 	save_process.init_data();
 	save_process.init_save_dir();
 	if(tof_geter.open_tof() == 0 && image_geter.open_camera() == 0)
@@ -1812,10 +2162,18 @@ int main(int argc, char **argv)
 		if(start_all() >= 0)
 		{
 			run_flag = 1;
-			rval = pthread_create(&tof_pthread_id, NULL, run_tof_pthread, NULL);
+			param.sched_priority = 21;
+			pthread_attr_setschedpolicy(&tof_pthread_attr, SCHED_RR);
+			pthread_attr_setschedparam(&tof_pthread_attr, &param);
+			pthread_attr_setinheritsched(&tof_pthread_attr, PTHREAD_EXPLICIT_SCHED);
+			rval = pthread_create(&tof_pthread_id, &tof_pthread_attr, run_tof_pthread, NULL);
 			if(rval >= 0)
 			{
-				rval = pthread_create(&image_pthread_id, NULL, run_image_pthread, NULL);
+				param.sched_priority = 21;
+				pthread_attr_setschedpolicy(&image_pthread_attr, SCHED_RR);
+				pthread_attr_setschedparam(&image_pthread_attr, &param);
+				pthread_attr_setinheritsched(&image_pthread_attr, PTHREAD_EXPLICIT_SCHED);
+				rval = pthread_create(&image_pthread_id, &image_pthread_attr, run_image_pthread, NULL);
 				if(rval < 0)
 				{
 					run_flag = 0;
@@ -1842,6 +2200,8 @@ int main(int argc, char **argv)
 			LOG(ERROR) << "start_all fail!";
 		}
 	}
+	pthread_attr_destroy(&tof_pthread_attr);
+    pthread_attr_destroy(&image_pthread_attr);
 #elif defined(ONLY_SEND_DATA)
 	pthread_t tof_pthread_id = 0;
 	pthread_t image_pthread_id = 0;
@@ -1891,7 +2251,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	LOG(INFO) << "net init success";
-	save_process.set_save_dir("/data/offline_data/2/image/", "/data/offline_data/2/tof/");
+	save_process.set_save_dir("/data/offline_data/N4/image/", "/data/offline_data/N4/tof/");
 	do {
 		RVAL_OK(init_param(&G_param));
 		RVAL_OK(env_init(&G_param));
