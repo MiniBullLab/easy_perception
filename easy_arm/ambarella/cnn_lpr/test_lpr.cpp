@@ -33,6 +33,8 @@
 
 #define TIME_MEASURE_LOOPS			(20)
 
+#define LPR_CPU_ID (6) /*CPU1-2*/
+
 #define IS_LPR_RUN
 //#define IS_CAR_RUN
 #define IS_PC_RUN
@@ -973,6 +975,7 @@ static void *run_lpr_pthread(void *param_thread)
 	std::vector<cv::Point2f> polygon;
 	float char_score = 0;
 
+	// cpu_set_t mask;
 	int policy = -1;
     struct sched_param param;
     pthread_getschedparam(pthread_self(),&policy,&param);
@@ -983,6 +986,13 @@ static void *run_lpr_pthread(void *param_thread)
     if(policy==SCHED_FIFO)
 		LOG(WARNING) << "SCHED_FIFO";
 	LOG(WARNING) << "sched_priority:" << param.sched_priority;
+
+	// CPU_ZERO(&mask);    //置空
+    // CPU_SET(0, &mask);   //设置亲和力值
+	// if (sched_setaffinity(0, sizeof(mask), &mask) == -1)//设置线程CPU亲和力
+	// {
+	// 	LOG(ERROR) << "[LPR]warning: could not set CPU affinity";
+	// }
 
 	list_lpr_bbox.bbox_num = 0;
 
@@ -1529,7 +1539,7 @@ static void *run_denet_pthread(void *thread_params)
 			{
 				iou = cal_iou(boxes[i], roi);
 				LOG(WARNING) << "car iou:" << iou;
-				if(iou > 0.01)
+				if(iou > 0.001)
 				{
 					float xmin = boxes[i][0];
 					float ymin = boxes[i][1];
@@ -1552,16 +1562,24 @@ static void *run_denet_pthread(void *thread_params)
 			if(car_count > 0)
 			{
 				if(list_has_car.bbox_num < MAX_OVERLAY_PLATE_NUM)
-					list_has_car.bbox_num++;
-				list_has_car.has[list_index++] = 1;
-				list_index = list_index % MAX_OVERLAY_PLATE_NUM;
+				{
+					list_has_car.has[list_has_car.bbox_num++] = 1;
+				}
+				else
+				{
+					LOG(INFO) << "not add car";
+				}
 			}
 			else
 			{
 				if(list_has_car.bbox_num < MAX_OVERLAY_PLATE_NUM)
-					list_has_car.bbox_num++;
-				list_has_car.has[list_index++] = 0;
-				list_index = list_index % MAX_OVERLAY_PLATE_NUM;
+				{
+					list_has_car.has[list_has_car.bbox_num++] = 0;
+				}
+				else
+				{
+					LOG(INFO) << "not add car";
+				}
 			}
 			pthread_mutex_unlock(&result_mutex);
 #endif 
@@ -1843,7 +1861,7 @@ static int start_all(global_control_param_t *G_param)
     pthread_attr_init(&det_lpr_attr);
 	pthread_attr_init(&denet_attr);
 	pthread_attr_init(&pc_attr);
-
+	
 	if(network_process.start() < 0)
 	{
 		rval = -1;
@@ -1913,34 +1931,34 @@ static int start_all(global_control_param_t *G_param)
 		det_lpr_thread_params.G_param = G_param;
 		RVAL_OK(ea_img_resource_drop_data(G_param->img_resource, &data));
 #if defined(IS_LPR_RUN)
-		param.sched_priority = 31;
-		pthread_attr_setschedpolicy(&det_lpr_attr, SCHED_RR);
-		pthread_attr_setschedparam(&det_lpr_attr, &param);
-		pthread_attr_setinheritsched(&det_lpr_attr, PTHREAD_EXPLICIT_SCHED);
+		// param.sched_priority = 41;
+		// pthread_attr_setschedpolicy(&det_lpr_attr, SCHED_RR);
+		// pthread_attr_setschedparam(&det_lpr_attr, &param);
+		// pthread_attr_setinheritsched(&det_lpr_attr, PTHREAD_EXPLICIT_SCHED);
 		rval = pthread_create(&det_lpr_pthread_id, &det_lpr_attr, run_det_lpr_pthread, (void*)&det_lpr_thread_params);
 		RVAL_ASSERT(rval == 0);
-		param.sched_priority = 31;
-		pthread_attr_setschedpolicy(&lpr_attr, SCHED_RR);
-		pthread_attr_setschedparam(&lpr_attr, &param);
-		pthread_attr_setinheritsched(&lpr_attr, PTHREAD_EXPLICIT_SCHED);
+		// param.sched_priority = 41;
+		// pthread_attr_setschedpolicy(&lpr_attr, SCHED_RR);
+		// pthread_attr_setschedparam(&lpr_attr, &param);
+		// pthread_attr_setinheritsched(&lpr_attr, PTHREAD_EXPLICIT_SCHED);
 		rval = pthread_create(&lpr_pthread_id, &lpr_attr, run_lpr_pthread, (void*)&lpr_thread_params);
 		RVAL_ASSERT(rval == 0);
 #endif
 
 #if defined(IS_CAR_RUN)
-		param.sched_priority = 31;
-		pthread_attr_setschedpolicy(&denet_attr, SCHED_RR);
-		pthread_attr_setschedparam(&denet_attr, &param);
-		pthread_attr_setinheritsched(&denet_attr, PTHREAD_EXPLICIT_SCHED);
+		// param.sched_priority = 31;
+		// pthread_attr_setschedpolicy(&denet_attr, SCHED_RR);
+		// pthread_attr_setschedparam(&denet_attr, &param);
+		// pthread_attr_setinheritsched(&denet_attr, PTHREAD_EXPLICIT_SCHED);
 		rval = pthread_create(&denet_pthread_id, &denet_attr, run_denet_pthread, (void*)&denet_thread_param);
 		RVAL_ASSERT(rval == 0);
 #endif
 
 #if defined(IS_PC_RUN)
-		param.sched_priority = 31;
-		pthread_attr_setschedpolicy(&pc_attr, SCHED_RR);
-		pthread_attr_setschedparam(&pc_attr, &param);
-		pthread_attr_setinheritsched(&pc_attr, PTHREAD_EXPLICIT_SCHED);
+		// param.sched_priority = 41;
+		// pthread_attr_setschedpolicy(&pc_attr, SCHED_RR);
+		// pthread_attr_setschedparam(&pc_attr, &param);
+		// pthread_attr_setinheritsched(&pc_attr, PTHREAD_EXPLICIT_SCHED);
 		rval = pthread_create(&process_pc_pthread_id, &pc_attr, process_pc_pthread, (void*)G_param);
 		RVAL_ASSERT(rval == 0);
 #endif
@@ -1992,6 +2010,7 @@ static int start_all(global_control_param_t *G_param)
     pthread_attr_destroy(&det_lpr_attr);
 	pthread_attr_destroy(&denet_attr);
 	pthread_attr_destroy(&pc_attr);
+	
 #if defined(OFFLINE_DATA)
 	save_process.offline_stop();
 #else

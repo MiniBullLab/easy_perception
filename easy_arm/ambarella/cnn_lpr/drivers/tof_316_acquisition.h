@@ -13,7 +13,7 @@
 
 //#define ONLY_SAVE_DATA
 
-#define TOF_BUFFER_SIZE (10)
+#define TOF_BUFFER_SIZE (5)
 #define MAX_POINT_CLOUD (240*180)
 
 #define DEPTH_WIDTH (240)
