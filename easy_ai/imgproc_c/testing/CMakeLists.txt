@@ -1,8 +1,8 @@
 project(test_imgproc)
 
-#include ai_algorithm directories
-include_directories(${ai_algorithm_BINARY_DIR})
-include_directories(${ai_algorithm_SOURCE_DIR})
+#include easy_ai directories
+include_directories(${easy_ai_BINARY_DIR})
+include_directories(${easy_ai_SOURCE_DIR})
 
 #collect source files
 file(GLOB TEST_IMGPROC_SRCS 

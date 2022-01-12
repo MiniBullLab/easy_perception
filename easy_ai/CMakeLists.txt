@@ -31,6 +31,9 @@ add_subdirectory(imgproc_c/testing)
 #build ldws_detector
 add_subdirectory(ldws)
 
+#build image_lpr
+add_subdirectory(image_lpr)
+
 #build image_bgs
 add_subdirectory(image_bgs)
 
