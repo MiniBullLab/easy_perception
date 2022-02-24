@@ -1,7 +1,7 @@
 include_directories(${amba_arm_BINARY_DIR})
 include_directories(${amba_arm_SOURCE_DIR})
 
-SET(AMBARELLA_DIR /easy_data/cv22_linux_sdk/ambarella)
+SET(AMBARELLA_DIR /home/lpj/Downloads/cv22_linux_sdk_2.5.4_PVT/ambarella)
 
 #fakeroot
 link_directories(${AMBARELLA_DIR}/out/cv22_walnut/fakeroot/usr/lib)
@@ -32,12 +32,19 @@ link_directories(${AMBARELLA_DIR}/out/cv22_walnut/packages/smartfb)
 include_directories(${AMBARELLA_DIR}/packages/vproc/inc)
 link_directories(${AMBARELLA_DIR}/out/cv22_walnut/packages/vproc)
 
+#data_transfer
+include_directories(${AMBARELLA_DIR}/packages/data_transfer)
+link_directories(${AMBARELLA_DIR}/out/cv22_walnut/packages/data_transfer)
+
 #third-party
 link_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/libjpeg-turbo/usr/lib)
 link_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/libpng/usr/lib)
 link_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/zlib/usr/lib)
 link_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/freetype/usr/lib)
 
+include_directories(${AMBARELLA_DIR}/prebuild/commercial/armv8-a/liteon_phase/include)
+link_directories(${AMBARELLA_DIR}/prebuild/commercial/armv8-a/liteon_phase/lib)
+include_directories(${AMBARELLA_DIR}/prebuild/ambarella/library/cvwarp/inc)
 include_directories(${AMBARELLA_DIR}/prebuild/ambarella/library/ai_cam/cvlib/include)
 link_directories(${AMBARELLA_DIR}/prebuild/ambarella/library/ai_cam/cvlib/lib/armv8-a)
 
@@ -48,6 +55,14 @@ link_directories(${AMBARELLA_DIR}/prebuild/ambarella/library/ai_cam/cvlib/lib/ar
 #message(STATUS "${OpenCV_INCLUDE_DIRS}, ${OpenCV_LIBS}")
 include_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/opencv4/include/opencv4)
 link_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/opencv4/usr/lib)
+
+#gflags
+include_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/gflags/include)
+link_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/gflags/usr/lib)
+
+#glog
+include_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/glog/include)
+link_directories(${AMBARELLA_DIR}/prebuild/third-party/armv8-a/glog/usr/lib)
 
 OPTION(USE_OpenMP "Use OpenMP" ON)
 IF(USE_OpenMP)
