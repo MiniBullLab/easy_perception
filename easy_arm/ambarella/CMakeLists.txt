@@ -18,19 +18,19 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 #include dependencies
-include(cmake/ambacv22_2_dependencies.cmake)
+include(cmake/ambacv25_3_dependencies.cmake)
 
 #include_directories
 message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
 
 #build cnn_runtime
-add_subdirectory(cnn_runtime)
+#add_subdirectory(cnn_runtime)
 
 #build test cnn
 #add_subdirectory(cnn_runtime/tests)
 
 #build cnn_lpr
-# add_subdirectory(cnn_lpr)
+add_subdirectory(cnn_lpr)
 
 #build cnn_det3d
-add_subdirectory(cnn_det3d)
+# add_subdirectory(cnn_det3d)
